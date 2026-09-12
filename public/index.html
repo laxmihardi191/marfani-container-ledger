@@ -680,7 +680,7 @@ document.getElementById('fetchBtn').addEventListener('click', async () => {
   showError('');
   setStatus(false, 'Syncing…');
   try{
-    const res = await fetch(url, {cache:'no-store'});
+    const res = await fetch('/api/cloud-file?url=' + encodeURIComponent(url), {cache:'no-store'});
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const buf = await res.arrayBuffer();
     loadFromArrayBuffer(buf, 'cloud link');

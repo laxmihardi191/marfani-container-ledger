@@ -59,6 +59,22 @@ app.use((req, res, next) => {
   res.redirect('/login');
 });
 
+app.get('/api/cloud-file', async (req, res) => {
+  const sourceUrl = String(req.query.url || '');
+  if(!/^https?:\/\//i.test(sourceUrl)){
+    return res.status(400).json({error: 'A public http(s) file URL is required'});
+  }
+  try{
+    const response = await fetch(sourceUrl, {redirect: 'follow'});
+    if(!response.ok) return res.status(response.status).json({error: `Cloud file returned HTTP ${response.status}`});
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.type('application/octet-stream').send(buffer);
+  }catch(error){
+    console.error('Cloud file fetch failed:', error);
+    res.status(502).json({error: 'Could not download the cloud file. Check that the link is public.'});
+  }
+});
+
 async function ensureDatabase(){
   if(!pool) return;
   await pool.query(`
