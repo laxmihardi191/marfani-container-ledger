@@ -174,6 +174,31 @@
     color:var(--grey);
     margin-top:4px;
   }
+  .ops-dashboard{padding:24px 32px 0;background:#F1F4F9;}
+  .ops-cards{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:16px;}
+  .ops-card,.ops-panel{background:#fff;border:1px solid #E1E7F0;border-radius:8px;box-shadow:0 2px 6px rgba(27,36,48,.08);}
+  .ops-card{padding:16px 18px;min-height:104px;}
+  .ops-card .number{font:700 30px 'IBM Plex Mono',monospace;color:#13284A;}
+  .ops-card .title{font-size:12px;font-weight:700;color:#526A8A;text-transform:uppercase;letter-spacing:.04em;margin-top:5px;}
+  .ops-card .note{font-size:11px;color:#8FA0BA;margin-top:5px;}
+  .ops-panel{padding:18px;margin-top:18px;}
+  .ops-panel h2{font:700 13px 'IBM Plex Sans',sans-serif;color:#526A8A;text-transform:uppercase;letter-spacing:.06em;margin:0 0 16px;}
+  .job-status{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .job-item{padding:14px 16px;border-radius:9px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;color:#405575;font-size:13px;}
+  .job-item strong{font:700 20px 'IBM Plex Mono',monospace;color:#142A4D;}
+  .job-item i{width:9px;height:9px;border-radius:50%;background:#168AB0;}
+  .job-item.awaiting{background:#FFF0C2}.job-item.awaiting i{background:#DC8200}
+  .job-item.filed{background:#C9F3F8}.job-item.filed i{background:#168AB0}
+  .job-item.ooc{background:#E8E0FF}.job-item.ooc i{background:#7439E8}
+  .job-item.ready{background:#D2F6E2}.job-item.ready i{background:#0A9B70}
+  .ops-analytics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:18px;}
+  .ops-analytics .ops-panel{margin-top:0;min-width:0;}
+  .ops-chart{height:230px;position:relative;}
+  .expiry-list{height:230px;overflow:auto;display:grid;gap:8px;align-content:start;}
+  .expiry-item{background:#F1F4F9;border-radius:9px;padding:10px 12px;font-size:12px;color:#405575;display:flex;justify-content:space-between;gap:12px;}
+  .expiry-item strong{color:#142A4D}.expiry-item span:last-child{text-align:right;color:#DC8200;white-space:nowrap;}
+  @media (max-width:1000px){.ops-cards{grid-template-columns:repeat(3,1fr)}.ops-analytics{grid-template-columns:1fr 1fr}.job-status{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:650px){.ops-dashboard{padding:16px}.ops-cards,.ops-analytics,.job-status{grid-template-columns:1fr}.ops-card{min-height:auto}}
 
   /* ---------- Main layout ---------- */
   .content{padding:32px;}
@@ -364,6 +389,30 @@
   <div class="kpi"><div class="label">Closed / delivered</div><div class="value" id="kpiClosed">—</div></div>
 </div>
 
+<section class="ops-dashboard" aria-label="Operations overview">
+  <div class="ops-cards">
+    <div class="ops-card"><div class="number" id="opsLive">0</div><div class="title">Live jobs</div><div class="note">Live shipments</div></div>
+    <div class="ops-card"><div class="number" id="opsArrived">0</div><div class="title">Containers arrived</div><div class="note">Total containers</div></div>
+    <div class="ops-card"><div class="number" id="opsBoe">0</div><div class="title">BOE pending</div><div class="note">Awaiting clearance</div></div>
+    <div class="ops-card"><div class="number" id="opsOoc">0</div><div class="title">OOC completed</div><div class="note">Ready for delivery</div></div>
+    <div class="ops-card"><div class="number" id="opsDispatch">0</div><div class="title">Dispatch jobs</div><div class="note">Dispatch shipments</div></div>
+  </div>
+  <div class="ops-panel">
+    <h2>Job status overview</h2>
+    <div class="job-status">
+      <div class="job-item awaiting"><i></i><span>Awaiting BOE</span><strong id="statusBoe">0</strong></div>
+      <div class="job-item filed"><i></i><span>BOE filed</span><strong id="statusFiled">0</strong></div>
+      <div class="job-item ooc"><i></i><span>Awaiting OOC</span><strong id="statusOoc">0</strong></div>
+      <div class="job-item ready"><i></i><span>Ready for delivery</span><strong id="statusReady">0</strong></div>
+    </div>
+  </div>
+  <div class="ops-analytics">
+    <div class="ops-panel"><h2>Shipping line breakdown</h2><div class="ops-chart"><canvas id="shippingLineChart"></canvas></div></div>
+    <div class="ops-panel"><h2>Upcoming ETAs</h2><div class="ops-chart"><canvas id="etaChart"></canvas></div></div>
+    <div class="ops-panel"><h2>Nearing expiry</h2><div class="expiry-list" id="expiryList"></div></div>
+  </div>
+</section>
+
 <div class="content">
 
   <div id="emptyState" class="empty-state">
@@ -426,7 +475,7 @@
 /* ---------------- state ---------------- */
 let shipRows = [];      // parsed shipment rows (objects)
 let daywiseRows = [];   // parsed Daywise rows
-let vendorChart, statusChart, daywiseChart;
+let vendorChart, statusChart, daywiseChart, shippingLineChart, etaChart;
 let refreshTimer = null;
 let newDataMode = false;
 
@@ -579,11 +628,66 @@ function renderAll(){
   document.getElementById('emptyState').style.display = 'none';
   document.getElementById('mainBody').style.display = 'block';
   showError('');
+  renderOpsDashboard();
   renderKpis();
   renderVendorChart();
   renderStatusChart();
   renderShipTable();
   renderDaywise();
+}
+
+function dateValue(value){
+  if(value instanceof Date && !isNaN(value)) return value;
+  const text = String(value || '').trim();
+  const match = text.match(/^(\d{1,2})[-\/]([0-9]{1,2})(?:[-\/]([0-9]{2,4}))?$/);
+  if(match){
+    const year = match[3] ? (match[3].length === 2 ? 2000 + Number(match[3]) : Number(match[3])) : new Date().getFullYear();
+    return new Date(year, Number(match[2]) - 1, Number(match[1]));
+  }
+  const parsed = new Date(text);
+  return isNaN(parsed) ? null : parsed;
+}
+
+function renderOpsDashboard(){
+  const text = row => Object.values(row).join(' ').toLowerCase();
+  const closed = row => /deliver|closed|release|complete/.test(text(row));
+  const boePending = row => /boe/.test(text(row)) && !/filed|complete|paid/.test(text(row));
+  const boeFiled = row => /boe/.test(text(row)) && /filed/.test(text(row));
+  const oocComplete = row => /ooc/.test(text(row)) && /complete|completed|ready|deliver/.test(text(row));
+  const ready = row => /ready|deliver/.test(text(row));
+  const live = shipRows.filter(row => !closed(row)).length;
+  const boe = shipRows.filter(boePending).length;
+  const filed = shipRows.filter(boeFiled).length;
+  const ooc = shipRows.filter(oocComplete).length;
+  const readyCount = shipRows.filter(ready).length;
+  document.getElementById('opsLive').textContent = live;
+  document.getElementById('opsArrived').textContent = shipRows.length;
+  document.getElementById('opsBoe').textContent = boe;
+  document.getElementById('opsOoc').textContent = ooc;
+  document.getElementById('opsDispatch').textContent = shipRows.filter(row => /dispatch/.test(text(row))).length;
+  document.getElementById('statusBoe').textContent = boe;
+  document.getElementById('statusFiled').textContent = filed;
+  document.getElementById('statusOoc').textContent = Math.max(0, shipRows.length - ooc - readyCount);
+  document.getElementById('statusReady').textContent = readyCount;
+
+  const carrierCounts = {};
+  shipRows.forEach(row => { const name = row.vendor || 'Unknown'; carrierCounts[name] = (carrierCounts[name] || 0) + 1; });
+  const carriers = Object.entries(carrierCounts).sort((a,b) => b[1] - a[1]).slice(0, 8);
+  const lineContext = document.getElementById('shippingLineChart').getContext('2d');
+  if(shippingLineChart) shippingLineChart.destroy();
+  shippingLineChart = new Chart(lineContext, {type:'doughnut', data:{labels:carriers.map(item=>item[0]), datasets:[{data:carriers.map(item=>item[1]), backgroundColor:['#2F68E8','#0A9B70','#D87900','#7439E8','#168AB0','#D93030','#6F7F9B','#B4C0D0']}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,font:{size:10}}}}}});
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const etaRows = shipRows.map(row => ({row, date:dateValue(row.etaDate)})).filter(item => item.date && item.date >= today && item.date <= new Date(today.getTime() + 14 * 86400000));
+  const etaCounts = {};
+  etaRows.forEach(item => { const key = item.date.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); etaCounts[key] = (etaCounts[key] || 0) + 1; });
+  const etaEntries = Object.entries(etaCounts);
+  const etaContext = document.getElementById('etaChart').getContext('2d');
+  if(etaChart) etaChart.destroy();
+  etaChart = new Chart(etaContext, {type:'bar', data:{labels:etaEntries.map(item=>item[0]), datasets:[{data:etaEntries.map(item=>item[1]),backgroundColor:'#2F68E8',borderRadius:4,maxBarThickness:28}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{grid:{display:false}}}}});
+
+  const expiryRows = shipRows.map(row => ({row, date:dateValue(row.freeTill)})).filter(item => item.date).sort((a,b)=>a.date-b.date).slice(0,8);
+  document.getElementById('expiryList').innerHTML = expiryRows.length ? expiryRows.map(item => `<div class="expiry-item"><span><strong>${item.row.bl6 || 'Shipment'}</strong> ${item.row.vendor || ''}</span><span>${item.date.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span></div>`).join('') : '<div class="expiry-item">No expiry dates available</div>';
 }
 
 function renderKpis(){
