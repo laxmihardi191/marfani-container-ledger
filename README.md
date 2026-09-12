@@ -1,4 +1,4 @@
-# Marfani Steels — Container Cost Ledger
+# Marfani Steel Group — Container Cost Ledger
 
 A live dashboard for the container costing / shipment tracking workbook.
 Workbook rows are stored in PostgreSQL so authorized users can view the same

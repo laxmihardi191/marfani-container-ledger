@@ -1,7 +1,7 @@
 {
   "name": "container-cost-ledger",
   "version": "1.0.0",
-  "description": "Marfani Steels live container cost dashboard",
+  "description": "Marfani Steel Group live container cost dashboard",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
