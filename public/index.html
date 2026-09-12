@@ -312,7 +312,7 @@
   </div>
 </div>
 
-<div class="syncbar">
+<div class="syncbar" id="syncbar">
   <div class="sync-group">
     <label>Cloud file link</label>
     <input type="text" id="sourceUrl" placeholder="Direct-download URL to your .xlsx / .xlsm">
@@ -746,6 +746,13 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetch('/api/logout', {method:'POST'});
   window.location.href = '/login';
 });
+async function loadCurrentUser(){
+  const response = await fetch('/api/me', {cache:'no-store'});
+  if(!response.ok) return;
+  const user = await response.json();
+  if(user.role !== 'admin') document.getElementById('syncbar').style.display = 'none';
+}
+loadCurrentUser();
 loadFromDatabase();
 </script>
 </body>

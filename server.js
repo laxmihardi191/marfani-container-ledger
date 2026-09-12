@@ -52,7 +52,7 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/register', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'register.html'));
+  res.redirect('/login');
 });
 
 app.post('/api/login', async (req, res) => {
@@ -69,25 +69,6 @@ app.post('/api/login', async (req, res) => {
   res.json({ok: true});
 });
 
-app.post('/api/register', async (req, res) => {
-  const displayName = String(req.body?.displayName || '').trim();
-  const username = String(req.body?.username || '').trim().toLowerCase();
-  const password = String(req.body?.password || '');
-  if(!pool) return res.status(503).json({error: 'Database is not configured'});
-  if(displayName.length < 2 || username.length < 3 || password.length < 8){
-    return res.status(400).json({error: 'Enter a name, a user ID of 3+ characters, and a password of 8+ characters'});
-  }
-  try{
-    const passwordHash = await bcrypt.hash(password, 12);
-    await pool.query('INSERT INTO users (display_name, username, password_hash) VALUES ($1, $2, $3)', [displayName, username, passwordHash]);
-    res.json({ok: true});
-  }catch(error){
-    if(error.code === '23505') return res.status(409).json({error: 'That user ID already exists'});
-    console.error('Registration failed:', error);
-    res.status(500).json({error: 'Could not create user'});
-  }
-});
-
 app.post('/api/logout', (req, res) => {
   res.setHeader('Set-Cookie', 'cst_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
   res.json({ok: true});
@@ -99,7 +80,43 @@ app.use((req, res, next) => {
   res.redirect('/login');
 });
 
-app.get('/api/cloud-file', async (req, res) => {
+async function requireAdmin(req, res, next){
+  if(!pool) return res.status(503).json({error: 'Database is not configured'});
+  const username = sessionUsername(req);
+  const result = await pool.query('SELECT username, display_name, role FROM users WHERE username = $1', [username]);
+  if(!result.rowCount || result.rows[0].role !== 'admin') return res.status(403).json({error: 'Administrator access required'});
+  req.user = result.rows[0];
+  next();
+}
+
+app.get('/admin/users', requireAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-users.html'));
+});
+
+app.get('/api/me', async (req, res) => {
+  const result = await pool.query('SELECT display_name, username, role FROM users WHERE username = $1', [sessionUsername(req)]);
+  res.json(result.rows[0] || {});
+});
+
+app.post('/api/admin/users', requireAdmin, async (req, res) => {
+  const displayName = String(req.body?.displayName || '').trim();
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if(displayName.length < 2 || username.length < 3 || password.length < 8){
+    return res.status(400).json({error: 'Name, user ID of 3+ characters, and password of 8+ characters are required'});
+  }
+  try{
+    const passwordHash = await bcrypt.hash(password, 12);
+    await pool.query('INSERT INTO users (display_name, username, password_hash, role) VALUES ($1, $2, $3, $4)', [displayName, username, passwordHash, 'user']);
+    res.json({ok: true, username});
+  }catch(error){
+    if(error.code === '23505') return res.status(409).json({error: 'That user ID already exists'});
+    console.error('Admin user creation failed:', error);
+    res.status(500).json({error: 'Could not create user'});
+  }
+});
+
+app.get('/api/cloud-file', requireAdmin, async (req, res) => {
   const sourceUrl = String(req.query.url || '');
   if(!/^https?:\/\//i.test(sourceUrl)){
     return res.status(400).json({error: 'A public http(s) file URL is required'});
@@ -147,15 +164,17 @@ async function ensureDatabase(){
       display_name TEXT NOT NULL,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
   `);
   if(APP_USERNAME && APP_PASSWORD){
     const passwordHash = await bcrypt.hash(APP_PASSWORD, 12);
     await pool.query(`
       INSERT INTO users (display_name, username, password_hash)
       VALUES ($1, $2, $3)
-      ON CONFLICT (username) DO NOTHING
+      ON CONFLICT (username) DO UPDATE SET role = 'admin'
     `, [APP_USERNAME, APP_USERNAME.toLowerCase(), passwordHash]);
   }
 }
@@ -179,6 +198,8 @@ app.get('/api/data', async (req, res) => {
 
 app.put('/api/data', async (req, res) => {
   if(!pool) return res.status(503).json({error: 'DATABASE_URL is not configured'});
+  const user = await pool.query('SELECT role FROM users WHERE username = $1', [sessionUsername(req)]);
+  if(!user.rowCount || user.rows[0].role !== 'admin') return res.status(403).json({error: 'Only administrators can upload or sync files'});
   const {shipRows, daywiseRows} = req.body || {};
   if(!Array.isArray(shipRows) || !Array.isArray(daywiseRows)){
     return res.status(400).json({error: 'shipRows and daywiseRows must be arrays'});
