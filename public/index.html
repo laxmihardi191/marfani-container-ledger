@@ -279,6 +279,8 @@
   .shipment-table tbody tr:nth-child(odd){background:#F5F9FD;}
   .shipment-table tbody tr:hover{background:#C6E0B4;}
   .shipment-table tbody tr.selected{background:#B7E1CD;outline:2px solid var(--steel);outline-offset:-2px;}
+  .expand-cell{width:42px;min-width:42px;padding:6px!important;}
+  .expand-btn{padding:2px 8px;border:1px solid var(--steel);background:#fff;color:var(--steel);font-size:15px;line-height:1.1;}
   .shipment-table .remark-cell{min-width:210px; white-space:normal; text-align:left; font-family:'IBM Plex Sans',sans-serif;}
   .shipment-table .eta-cell{background:#B7E1CD;}
   .shipment-table .free-cell{color:#D60000; font-weight:700;}
@@ -784,7 +786,7 @@ function renderShipTable(){
   });
 
   const head = document.getElementById('shipHead');
-  head.innerHTML = SHIP_COLS.map(c => `<th data-key="${c.key}">${c.label}${sortState.key===c.key ? (sortState.dir===1?' ▲':' ▼') : ''}</th>`).join('');
+  head.innerHTML = (newDataMode ? '<th class="expand-cell"></th>' : '') + SHIP_COLS.map(c => `<th data-key="${c.key}">${c.label}${sortState.key===c.key ? (sortState.dir===1?' ▲':' ▼') : ''}</th>`).join('');
   head.querySelectorAll('th').forEach(th => th.onclick = () => {
     const k = th.dataset.key;
     sortState.dir = (sortState.key===k) ? -sortState.dir : -1;
@@ -793,7 +795,7 @@ function renderShipTable(){
   });
 
   const body = document.getElementById('shipBody');
-  body.innerHTML = rows.map(r => newDataMode ? `<tr class="${selectedShipment === r ? 'selected' : ''}" data-row-index="${shipRows.indexOf(r)}">${SHIP_COLS.map(column => {
+  body.innerHTML = rows.map(r => newDataMode ? `<tr class="${selectedShipment === r ? 'selected' : ''}" data-row-index="${shipRows.indexOf(r)}"><td class="expand-cell"><button class="expand-btn" type="button" aria-label="${selectedShipment === r ? 'Collapse' : 'Expand'} details">${selectedShipment === r ? '−' : '+'}</button></td>${SHIP_COLS.map(column => {
     const value = r._cells[column.key];
     const text = value instanceof Date ? fmtDate(value) : (value ?? '');
     const lowerLabel = column.label.toLowerCase();
@@ -822,8 +824,11 @@ function renderShipTable(){
     <td class="remark-cell">${r.remarks ?? ''}</td>
   </tr>`).join('');
 
-  body.querySelectorAll('tr[data-row-index]').forEach(row => row.addEventListener('click', () => {
-    selectedShipment = shipRows[Number(row.dataset.rowIndex)];
+  body.querySelectorAll('tr[data-row-index]').forEach(row => row.addEventListener('click', event => {
+    if(event.target.closest('button') || event.target.tagName === 'TD'){
+      const rowData = shipRows[Number(row.dataset.rowIndex)];
+      selectedShipment = selectedShipment === rowData ? null : rowData;
+    }
     renderShipTable();
     renderShipmentDetail();
   }));
