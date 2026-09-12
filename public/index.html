@@ -870,6 +870,7 @@ async function loadFromDatabase(){
     const data = await response.json();
     if(!data.shipRows.length && !data.daywiseRows.length) return;
     shipRows = data.shipRows;
+    newDataMode = shipRows.some(row => row.dutyAmount !== undefined || row.containerReceivedDate !== undefined || row.shippingLine !== undefined);
     shipRows.forEach((row, index) => {
       if(!row._id) row._id = 'row' + index;
       if(row._costTotal === undefined) row._costTotal = (row.dutyAmount||row.duty||0) + (row.doPayment||0) + (row.detention||0) + (row.damageClaim||row.damage||0) + (row.interestPenalty||row.interest||0) + (row.chaInvoiceAmount||row.chaInvoice||0);
