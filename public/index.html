@@ -259,6 +259,20 @@
   .shipment-table .remark-cell{min-width:210px; white-space:normal; text-align:left; font-family:'IBM Plex Sans',sans-serif;}
   .shipment-table .eta-cell{background:#B7E1CD;}
   .shipment-table .free-cell{color:#D60000; font-weight:700;}
+  .acc-wrap{border:1px solid var(--line);background:var(--card-bg);overflow-x:auto;}
+  .acc-head,.acc-summary{display:grid;grid-template-columns:26px 100px 110px 1.3fr 1.3fr 70px 140px 130px;gap:8px;min-width:900px;}
+  .acc-head{padding:10px 14px;background:var(--paper-dim);border-bottom:2px solid var(--ink);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:600;}
+  .acc-row{border-bottom:1px solid var(--line);min-width:900px;}
+  .acc-row:last-child{border-bottom:none;}
+  .acc-summary{align-items:center;padding:11px 14px;cursor:pointer;}
+  .acc-summary:hover{background:rgba(181,98,47,.06);}
+  .acc-row.open .acc-summary{background:rgba(60,110,113,.08);}
+  .acc-caret{color:var(--rust);font-size:13px;}
+  .acc-cell{font-size:12.5px;font-family:'IBM Plex Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .acc-cell.text{font-family:'IBM Plex Sans',sans-serif;white-space:normal;}
+  .acc-detail{padding:6px 14px 20px 48px;background:#F9F7F1;border-top:1px dashed var(--line);}
+  .dgroup{margin-top:16px}.dgroup h4{font-family:'Fraunces',serif;font-size:13px;font-weight:600;color:var(--steel);margin:0 0 10px;text-transform:uppercase;letter-spacing:.04em}
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px 20px}.dfield{display:flex;flex-direction:column;gap:1px}.dlabel{font-size:10.5px;color:var(--grey);text-transform:uppercase;letter-spacing:.03em}.dval{font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:var(--ink)}
   .detail-view{margin-top:22px;padding:18px;background:#F1F4F9;border:1px solid #E1E7F0;border-radius:8px;}
   .detail-view h2{font:700 13px 'IBM Plex Sans',sans-serif;color:#526A8A;text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px;}
   .detail-section{margin-top:18px;}
@@ -409,21 +423,16 @@
         <input type="text" id="searchShip" placeholder="Search vendor, BL no., product…" style="min-width:280px;">
         <span id="shipCount" style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--grey);"></span>
       </div>
-      <div class="table-wrap shipment-table">
-        <table id="shipTable">
-          <thead><tr id="shipHead"></tr></thead>
-          <tbody id="shipBody"></tbody>
-        </table>
+      <div class="acc-wrap">
+        <div class="acc-head"><span></span><span>BL (last 6)</span><span>Order Status</span><span>Vendor</span><span>Product</span><span>Conts.</span><span>Cost Total (INR)</span><span>Shipment Status</span></div>
+        <div id="shipBody"></div>
       </div>
-      <section class="detail-view" id="shipmentDetail" hidden>
-        <h2>Shipment details</h2>
-        <div id="detailSections"></div>
-      </section>
     </div>
 
     <div class="tab-panel" id="tab-fund">
-      <div class="table-toolbar"><input type="text" id="searchFund" placeholder="Search party, entity, grade..." style="min-width:280px;"><span id="fundCount" style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--grey);"></span></div>
-      <div class="table-wrap shipment-table"><table><thead><tr><th>S.N.</th><th>Party Name</th><th>Grade</th><th>Entity</th><th>Containers</th><th>ETA</th><th>Free Till</th><th>CHA</th><th>Qty KGS</th><th>Duty Approx INR</th><th>Payable INR</th><th>Total Required INR</th><th>Remarks</th></tr></thead><tbody id="fundBody"></tbody></table></div>
+      <div class="charts-row" style="margin-top:20px;"><div class="panel"><h2>Funds required by entity</h2><div class="chart-holder"><canvas id="fundEntityChart"></canvas></div></div><div class="panel"><h2>Funds required by CHA</h2><div class="chart-holder"><canvas id="fundChaChart"></canvas></div></div></div>
+      <div class="table-toolbar"><input type="text" id="searchFund" placeholder="Search party, CHA, entity..." style="min-width:280px;"><span id="fundCount" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--grey);"></span></div>
+      <div class="table-wrap"><table><thead><tr><th>BL</th><th>Party / Vendor</th><th>Entity</th><th>Grade</th><th>Conts</th><th>CHA</th><th>Qty (MT)</th><th>Duty (INR)</th><th>Extra Costs (INR)</th><th>CHA Invoice</th><th>Total Required</th><th>Pending USD</th><th>Status</th></tr></thead><tbody id="fundBody"></tbody></table></div>
     </div>
 
     <div class="tab-panel" id="tab-daywise">
@@ -448,12 +457,12 @@
 
 <script>
 /* ---------------- state ---------------- */
-let shipRows = [];      // parsed shipment rows (objects)
+let shipRows = [];      // parsed New data master rows
 let daywiseRows = [];   // parsed Daywise rows
-let vendorChart, statusChart, daywiseChart;
+let vendorChart, statusChart, daywiseChart, fundEntityChart, fundChaChart;
 let refreshTimer = null;
 let newDataMode = false;
-let selectedShipment = null;
+let expandedKeys = new Set();
 
 let SHIP_COLS = [
   {key:'serial', label:'S. N.'},
@@ -514,32 +523,24 @@ function parseWorkbook(data){
   newDataMode = Boolean(newDataSheetName);
   if(newDataSheetName){
     const arr = XLSX.utils.sheet_to_json(wb.Sheets[newDataSheetName], {header:1, defval:null, blankrows:true, raw:true});
-    const headerIndex = arr.findIndex(row => row && row.some(cell => String(cell || '').toLowerCase().includes('party name')));
-    const startIndex = headerIndex >= 0 ? headerIndex + 1 : 1;
-    const headers = (arr[headerIndex >= 0 ? headerIndex : 0] || []).map((value, index) => String(value || `Column ${index + 1}`).trim() || `Column ${index + 1}`);
-    const usedHeaders = {};
-    SHIP_COLS = headers.map((label, index) => {
-      const baseKey = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || `column_${index + 1}`;
-      usedHeaders[baseKey] = (usedHeaders[baseKey] || 0) + 1;
-      const key = usedHeaders[baseKey] === 1 ? baseKey : `${baseKey}_${usedHeaders[baseKey]}`;
-      return {key, label, index};
-    });
+    const startIndex = 4;
     shipRows = [];
     for(let i=startIndex; i<arr.length; i++){
       const r = arr[i];
       if(!r || r.every(cell => cell === null || cell === undefined || cell === '')) continue;
-      if(String(r[0] || '').toLowerCase() === 'total') continue;
-      const cells = {};
-      SHIP_COLS.forEach(column => { cells[column.key] = r[column.index]; });
+      if(String(r[1] || r[0] || '').toLowerCase() === 'total') continue;
       shipRows.push({
-        _cells: cells,
-        serial: r[0] ?? i - startIndex + 1,
-        bl6: r[1], orderStatus: r[2], soNo: r[3], vendor: r[4], product: r[5], entity: r[6],
-        containerCount: r[7], etaDate: r[8], freeTill: r[9], docStatus: r[10], chaName: r[11],
-        qtyKgs: toNum(r[12]), rate: toNum(r[13]), duty: toNum(r[14]), advance: toNum(r[15]),
-        amountToBePaid: toNum(r[16]), payableRs: toNum(r[17]), totalRequired: toNum(r[18]), remarks: r[19],
-        landingCost: toNum(r[18]), landingPerKg: null, shipStatus: r[10],
+        _id: 'row' + i, bl6: cleanErr(r[1]), orderStatus: cleanErr(r[2]), entity: r[3], blNo: r[4], blDate: r[5],
+        soNo: r[6], numContainers: toNum(r[7]), orderDate: r[8], vendor: r[9], product: r[10], category: r[11], composition: r[12],
+        qtySO: toNum(r[13]), rateSO: toNum(r[14]), taxableSO: toNum(r[15]), advanceAmt: toNum(r[16]), afterAdvSO: toNum(r[17]),
+        dnNo: r[18], dnDate: r[19], cont1: r[20], qty1: toNum(r[21]), cont2: r[22], qty2: toNum(r[23]), cont3: r[24], qty3: toNum(r[25]), cont4: r[26], qty4: toNum(r[27]),
+        dnRemarks: r[28], containerType: r[29], sealNo: r[30], vessel: r[31], portLoading: r[32], portDischarge: r[33], placeDelivery: r[34], hsnCode: r[35], insurance: r[36], psic: r[37],
+        simsAmount: toNum(r[38]), simsCertNo: r[39], invoiceNo: r[40], invoiceDate: r[41], invoiceQty: toNum(r[42]), rateInvoice: toNum(r[43]), taxableInvoice: toNum(r[44]), advanceInvoice: toNum(r[45]), afterAdvInvoice: toNum(r[46]), amountPaidUsd: toNum(r[47]), advSwift: r[48], bankChargesParty: toNum(r[49]), bankChargesDebit: toNum(r[50]),
+        shipmentStatus: r[51], documentsStatus: r[52], docTrackingNo: r[53], shippingLine: r[54], chaName: r[55], hssAgreement: r[56], doPayment: toNum(r[57]), detention: toNum(r[58]), damageClaim: toNum(r[59]), reasonDamage: r[60], beNo: r[61], dutyAmount: toNum(r[62]), interestPenalty: toNum(r[63]), totalBEAmount: toNum(r[64]), chaInvoiceAmount: toNum(r[65]), containerReceivedDate: r[66], bankOrmAdvance: r[67], bankOrmFinal: r[68],
       });
+      const row = shipRows[shipRows.length - 1];
+      row._costTotal = (row.dutyAmount||0)+(row.doPayment||0)+(row.detention||0)+(row.damageClaim||0)+(row.interestPenalty||0)+(row.chaInvoiceAmount||0);
+      row._pendingUsd = Math.max((row.afterAdvInvoice ?? row.afterAdvSO ?? 0)-(row.amountPaidUsd||0), 0);
     }
   }
 
@@ -594,6 +595,7 @@ function toNum(v){
   const n = parseFloat(String(v).replace(/[, ]/g,''));
   return isNaN(n) ? null : n;
 }
+function cleanErr(v){ return typeof v === 'string' && v.trim().startsWith('#') ? null : v; }
 
 /* ---------------- render ---------------- */
 function renderAll(){
@@ -607,17 +609,17 @@ function renderAll(){
   renderKpis();
   renderVendorChart();
   renderStatusChart();
-  renderShipTable();
+  renderShipAccordion();
   renderFundTable();
   renderDaywise();
 }
 
 function renderKpis(){
   const totalContainers = shipRows.length;
-  const totalLanding = shipRows.reduce((s,r)=> s + (r.landingCost||0), 0);
-  const totalDuty = shipRows.reduce((s,r)=> s + (r.duty||0), 0);
+  const totalLanding = shipRows.reduce((s,r)=> s + (r._costTotal||r.landingCost||0), 0);
+  const totalDuty = shipRows.reduce((s,r)=> s + (r.dutyAmount||r.duty||0), 0);
   const orderStatuses = shipRows.map(r => String(r.orderStatus||'').trim().toLowerCase());
-  const shipmentStatuses = shipRows.map(r => String(r.shipStatus||'').trim().toLowerCase());
+  const shipmentStatuses = shipRows.map(r => String(r.shipmentStatus||r.shipStatus||'').trim().toLowerCase());
   const active = orderStatuses.filter(status => status.includes('active')).length;
   const transit = shipmentStatuses.filter(status => status.includes('transit')).length;
   const closed = shipRows.filter((r, i) => orderStatuses[i].includes('closed') || shipmentStatuses[i].includes('deliver')).length;
@@ -634,7 +636,7 @@ function renderVendorChart(){
   const byVendor = {};
   shipRows.forEach(r=>{
     const v = r.vendor || 'Unspecified';
-    byVendor[v] = (byVendor[v]||0) + (r.landingCost||0);
+    byVendor[v] = (byVendor[v]||0) + (r._costTotal||r.landingCost||0);
   });
   const entries = Object.entries(byVendor).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const ctx = document.getElementById('vendorChart').getContext('2d');
@@ -658,7 +660,7 @@ function renderVendorChart(){
 function renderStatusChart(){
   const counts = {};
   shipRows.forEach(r=>{
-    const s = r.orderStatus || 'Unknown';
+    const s = r.orderStatus || r.shipmentStatus || 'Unknown';
     counts[s] = (counts[s]||0) + 1;
   });
   const labels = Object.keys(counts);
@@ -752,6 +754,46 @@ function renderFundTable(){
     <td>${fmtNum(row.payableRs, 2)}</td><td>${fmtNum(row.totalRequired, 2)}</td><td class="remark-cell">${row.remarks ?? ''}</td>
   </tr>`).join('');
   document.getElementById('fundCount').textContent = rows.length + ' of ' + shipRows.length + ' entries';
+}
+
+function fieldGroup(title, pairs){
+  const items = pairs.filter(pair => pair[1] !== null && pair[1] !== undefined && pair[1] !== '').map(pair => `<div class="dfield"><span class="dlabel">${pair[0]}</span><span class="dval">${pair[1]}</span></div>`).join('');
+  return items ? `<div class="dgroup"><h4>${title}</h4><div class="dgrid">${items}</div></div>` : '';
+}
+
+function renderShipAccordion(){
+  const search = document.getElementById('searchShip').value.trim().toLowerCase();
+  const rows = shipRows.filter(row => !search || [row.vendor,row.product,row.bl6,row.blNo,row.category,row.entity,row.shipmentStatus].some(value => String(value || '').toLowerCase().includes(search)));
+  const body = document.getElementById('shipBody');
+  body.innerHTML = rows.map(row => {
+    const open = expandedKeys.has(row._id);
+    const containers = [[row.cont1,row.qty1],[row.cont2,row.qty2],[row.cont3,row.qty3],[row.cont4,row.qty4]].filter(item => item[0]);
+    const detail = fieldGroup('Order & Party', [['Entity',row.entity],['BL No.',row.blNo],['BL Date',fmtDate(row.blDate)],['SO No.',row.soNo],['Order Date',fmtDate(row.orderDate)],['Category',row.category],['Composition',row.composition],['Qty as per SO (MT)',row.qtySO != null ? fmtNum(row.qtySO,2) : null],['Rate as per SO',row.rateSO != null ? fmtNum(row.rateSO,2) : null]])
+      + fieldGroup('Containers & Shipping', containers.map((item,index)=>[`Container ${index+1}`,item[0] + (item[1] != null ? ' · ' + fmtNum(item[1],2) + ' MT' : '')]).concat([['Container Type',row.containerType],['Seal No.',row.sealNo],['Vessel / Voyage',row.vessel],['Port of Loading',row.portLoading],['Port of Discharge',row.portDischarge],['Place of Delivery',row.placeDelivery],['Shipping Line',row.shippingLine],['HSN Code',row.hsnCode]]))
+      + fieldGroup('Invoice & Payment (USD)', [['Invoice No.',row.invoiceNo],['Invoice Date',fmtDate(row.invoiceDate)],['Invoice Qty',row.invoiceQty != null ? fmtNum(row.invoiceQty,2) : null],['Rate as per Invoice',row.rateInvoice != null ? fmtNum(row.rateInvoice,2) : null],['Amount Paid',row.amountPaidUsd != null ? fmtNum(row.amountPaidUsd) : null],['Pending to Vendor',fmtNum(row._pendingUsd)]] )
+      + fieldGroup('Landed Costs (INR)', [['DO Payment',fmtNum(row.doPayment)],['Detention',fmtNum(row.detention)],['Damage Claim',fmtNum(row.damageClaim)],['Duty Amount',fmtNum(row.dutyAmount)],['Interest / Penalty',fmtNum(row.interestPenalty)],['Total BE Amount',fmtNum(row.totalBEAmount)],['CHA Invoice Amount',fmtNum(row.chaInvoiceAmount)],['BE No.',row.beNo]])
+      + fieldGroup('Status & Docs', [['Documents Status',row.documentsStatus],['CHA Name',row.chaName],['Doc Tracking No.',row.docTrackingNo],['Container Received Date',fmtDate(row.containerReceivedDate)],['DN Remarks',row.dnRemarks]]);
+    return `<div class="acc-row ${open ? 'open' : ''}" data-id="${row._id}"><div class="acc-summary"><span class="acc-caret">${open ? '▾' : '▸'}</span><span class="acc-cell">${row.bl6 ?? ''}</span><span class="acc-cell"><span class="pill ${statusPillClass(row.orderStatus)}">${row.orderStatus ?? '—'}</span></span><span class="acc-cell text">${row.vendor ?? ''}</span><span class="acc-cell text">${row.product ?? ''}</span><span class="acc-cell">${fmtNum(row.numContainers)}</span><span class="acc-cell">₹${fmtNum(row._costTotal)}</span><span class="acc-cell"><span class="pill ${statusPillClass(row.shipmentStatus)}">${row.shipmentStatus ?? '—'}</span></span></div><div class="acc-detail" style="display:${open ? 'block' : 'none'}">${detail}</div></div>`;
+  }).join('');
+  body.querySelectorAll('.acc-summary').forEach(summary => summary.addEventListener('click', () => { const id = summary.closest('.acc-row').dataset.id; if(expandedKeys.has(id)) expandedKeys.delete(id); else expandedKeys.add(id); renderShipAccordion(); }));
+  document.getElementById('shipCount').textContent = rows.length + ' of ' + shipRows.length + ' shipments';
+}
+
+function renderFundTable(){
+  const search = document.getElementById('searchFund').value.trim().toLowerCase();
+  const rows = shipRows.filter(row => !search || [row.vendor,row.chaName,row.entity,row.composition].some(value => String(value || '').toLowerCase().includes(search)));
+  document.getElementById('fundBody').innerHTML = rows.map(row => `<tr><td>${row.bl6 ?? ''}</td><td class="text">${row.vendor ?? ''}</td><td>${row.entity ?? ''}</td><td class="text">${row.composition ?? ''}</td><td>${row.numContainers ?? ''}</td><td class="text">${row.chaName ?? ''}</td><td>${fmtNum(row.invoiceQty ?? row.qtySO,2)}</td><td>${fmtNum(row.dutyAmount)}</td><td>${fmtNum((row.doPayment||0)+(row.detention||0)+(row.damageClaim||0))}</td><td>${fmtNum(row.chaInvoiceAmount)}</td><td>${fmtNum(row._costTotal)}</td><td>${row._pendingUsd > 0 ? fmtNum(row._pendingUsd) : '—'}</td><td><span class="pill ${statusPillClass(row.orderStatus)}">${row.orderStatus ?? '—'}</span></td></tr>`).join('');
+  document.getElementById('fundCount').textContent = rows.length + ' of ' + shipRows.length + ' entries';
+  const byEntity = {}, byCha = {};
+  shipRows.forEach(row => { byEntity[row.entity || 'Unspecified'] = (byEntity[row.entity || 'Unspecified'] || 0) + (row._costTotal || 0); byCha[row.chaName || 'Unspecified'] = (byCha[row.chaName || 'Unspecified'] || 0) + (row._costTotal || 0); });
+  const entityEntries = Object.entries(byEntity).sort((a,b)=>b[1]-a[1]);
+  const chaEntries = Object.entries(byCha).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const entityContext = document.getElementById('fundEntityChart').getContext('2d');
+  if(fundEntityChart) fundEntityChart.destroy();
+  fundEntityChart = new Chart(entityContext,{type:'doughnut',data:{labels:entityEntries.map(item=>item[0]),datasets:[{data:entityEntries.map(item=>item[1]),backgroundColor:['#3C6E71','#B5622F','#8C8577','#D98E5F','#1B2430']}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+  const chaContext = document.getElementById('fundChaChart').getContext('2d');
+  if(fundChaChart) fundChaChart.destroy();
+  fundChaChart = new Chart(chaContext,{type:'bar',data:{labels:chaEntries.map(item=>item[0]),datasets:[{data:chaEntries.map(item=>item[1]),backgroundColor:'#B5622F',borderRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
 }
 
 function renderShipmentDetail(){
@@ -895,7 +937,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
-document.getElementById('searchShip').addEventListener('input', renderShipTable);
+document.getElementById('searchShip').addEventListener('input', renderShipAccordion);
 document.getElementById('searchFund').addEventListener('input', renderFundTable);
 document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetch('/api/logout', {method:'POST'});
