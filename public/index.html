@@ -63,6 +63,7 @@
     color:var(--ink-soft);
   }
   .logout-btn{margin-top:8px; padding:5px 10px; font-size:11px;}
+  .admin-link{display:none; color:var(--ink); font-size:11px;}
   .status-dot{
     display:inline-block;
     width:8px;height:8px;
@@ -308,6 +309,7 @@
   <div class="status-block">
     <div><span class="status-dot" id="statusDot"></span><span id="statusText">Awaiting data</span></div>
     <div id="lastSync">No sync yet</div>
+    <a class="admin-link" id="adminLink" href="/admin/users">Admin control panel</a>
     <button class="logout-btn" id="logoutBtn" type="button">Log out</button>
   </div>
 </div>
@@ -751,6 +753,7 @@ async function loadCurrentUser(){
   if(!response.ok) return;
   const user = await response.json();
   if(user.role !== 'admin') document.getElementById('syncbar').style.display = 'none';
+  if(user.role === 'admin') document.getElementById('adminLink').style.display = 'inline-block';
 }
 loadCurrentUser();
 loadFromDatabase();

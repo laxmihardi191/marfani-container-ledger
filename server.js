@@ -135,6 +135,31 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  const result = await pool.query('SELECT display_name, username, role, created_at FROM users ORDER BY created_at DESC');
+  res.json(result.rows);
+});
+
+app.patch('/api/admin/users/:username/password', requireAdmin, async (req, res) => {
+  const password = String(req.body?.password || '');
+  if(password.length < 8) return res.status(400).json({error: 'Password must be at least 8 characters'});
+  const passwordHash = await bcrypt.hash(password, 12);
+  const result = await pool.query('UPDATE users SET password_hash = $1 WHERE username = $2', [passwordHash, req.params.username.toLowerCase()]);
+  if(!result.rowCount) return res.status(404).json({error: 'User not found'});
+  res.json({ok: true});
+});
+
+app.delete('/api/admin/users/:username', requireAdmin, async (req, res) => {
+  const username = req.params.username.toLowerCase();
+  const target = await pool.query('SELECT role FROM users WHERE username = $1', [username]);
+  if(!target.rowCount) return res.status(404).json({error: 'User not found'});
+  if(target.rows[0].role === 'admin' || username === sessionUsername(req)){
+    return res.status(400).json({error: 'Admin accounts cannot be deleted'});
+  }
+  await pool.query('DELETE FROM users WHERE username = $1', [username]);
+  res.json({ok: true});
+});
+
 app.get('/api/cloud-file', requireAdmin, async (req, res) => {
   const sourceUrl = String(req.query.url || '');
   if(!/^https?:\/\//i.test(sourceUrl)){
