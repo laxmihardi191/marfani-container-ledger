@@ -1,4 +1,4 @@
-// Minimal server for hosting the Container Cost Ledger dashboard.
+// Minimal server for hosting the Marfani Steel Group dashboard.
 // Render (and most hosts) set PORT automatically — we just need to listen on it.
 
 const express = require('express');
@@ -286,7 +286,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Container Cost Ledger running on port ${PORT}`);
+  console.log(`Marfani Steel Group running on port ${PORT}`);
   ensureDatabase().catch(error => {
     console.error('Database setup failed; app remains available:', error);
   });
