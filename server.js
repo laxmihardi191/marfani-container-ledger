@@ -70,25 +70,26 @@ app.get('/api/cloud-file', async (req, res) => {
     return res.status(400).json({error: 'A public http(s) file URL is required'});
   }
   try{
-    const downloadUrl = sourceUrl + (sourceUrl.includes('?') ? '&' : '?') + 'download=1';
-    let response = await fetch(downloadUrl, {
-      redirect: 'follow',
-      headers: sharePointHeaders,
-    });
-    if(!response.ok){
-      response = await fetch(sourceUrl, {
-        redirect: 'follow',
-        headers: sharePointHeaders,
-      });
+    const separator = sourceUrl.includes('?') ? '&' : '?';
+    const candidates = [
+      sourceUrl + separator + 'download=1',
+      sourceUrl + separator + 'download=1&raw=1',
+      sourceUrl.replace(/\?.*$/, '') + '?download=1',
+      sourceUrl,
+    ];
+    let lastStatus = 502;
+    for(const candidate of candidates){
+      const response = await fetch(candidate, {redirect: 'follow', headers: sharePointHeaders});
+      lastStatus = response.status;
+      if(!response.ok) continue;
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const contentType = response.headers.get('content-type') || '';
+      const isWorkbook = buffer.subarray(0, 2).toString() === 'PK' || contentType.includes('excel');
+      if(isWorkbook){
+        return res.type('application/octet-stream').send(buffer);
+      }
     }
-    if(!response.ok) return res.status(response.status).json({error: `Cloud file returned HTTP ${response.status}`});
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const contentType = response.headers.get('content-type') || '';
-    const isWorkbook = buffer.subarray(0, 2).toString() === 'PK' || contentType.includes('excel');
-    if(!isWorkbook){
-      return res.status(422).json({error: 'SharePoint returned a preview page instead of the Excel file. Copy the link again after selecting Anyone with the link can view.'});
-    }
-    res.type('application/octet-stream').send(buffer);
+    return res.status(lastStatus === 200 ? 422 : lastStatus).json({error: 'SharePoint did not return the Excel file. Use the file upload, or create a new Anyone-with-the-link view-only link.'});
   }catch(error){
     console.error('Cloud file fetch failed:', error);
     res.status(502).json({error: 'Could not download the cloud file. Check that the link is public.'});
