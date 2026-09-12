@@ -337,6 +337,7 @@
   <div class="kpi"><div class="label">Total containers</div><div class="value" id="kpiContainers">—</div></div>
   <div class="kpi"><div class="label">Landing cost (INR)</div><div class="value steel" id="kpiLanding">—</div></div>
   <div class="kpi"><div class="label">Duty paid (INR)</div><div class="value" id="kpiDuty">—</div></div>
+  <div class="kpi"><div class="label">Active shipments</div><div class="value rust" id="kpiActive">—</div></div>
   <div class="kpi"><div class="label">In-transit</div><div class="value rust" id="kpiTransit">—</div></div>
   <div class="kpi"><div class="label">Closed / delivered</div><div class="value" id="kpiClosed">—</div></div>
 </div>
@@ -524,12 +525,16 @@ function renderKpis(){
   const totalContainers = shipRows.length;
   const totalLanding = shipRows.reduce((s,r)=> s + (r.landingCost||0), 0);
   const totalDuty = shipRows.reduce((s,r)=> s + (r.duty||0), 0);
-  const transit = shipRows.filter(r => String(r.shipStatus||'').toLowerCase().includes('transit') || String(r.orderStatus||'').toLowerCase()==='active').length;
-  const closed = shipRows.filter(r => String(r.orderStatus||'').toLowerCase()==='closed' || String(r.shipStatus||'').toLowerCase().includes('deliver')).length;
+  const orderStatuses = shipRows.map(r => String(r.orderStatus||'').trim().toLowerCase());
+  const shipmentStatuses = shipRows.map(r => String(r.shipStatus||'').trim().toLowerCase());
+  const active = orderStatuses.filter(status => status.includes('active')).length;
+  const transit = shipmentStatuses.filter(status => status.includes('transit')).length;
+  const closed = shipRows.filter((r, i) => orderStatuses[i].includes('closed') || shipmentStatuses[i].includes('deliver')).length;
 
   document.getElementById('kpiContainers').textContent = fmtNum(totalContainers);
   document.getElementById('kpiLanding').textContent = '₹' + fmtNum(totalLanding);
   document.getElementById('kpiDuty').textContent = '₹' + fmtNum(totalDuty);
+  document.getElementById('kpiActive').textContent = fmtNum(active);
   document.getElementById('kpiTransit').textContent = fmtNum(transit);
   document.getElementById('kpiClosed').textContent = fmtNum(closed);
 }
