@@ -4,6 +4,7 @@
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 
 const app = express();
@@ -23,34 +24,68 @@ const pool = process.env.DATABASE_URL ? new Pool({
 
 app.use(express.json({ limit: '10mb' }));
 
-function sessionToken(){
-  return crypto.createHmac('sha256', SESSION_SECRET || '').update(APP_USERNAME || '').digest('hex');
+function sessionToken(username){
+  const payload = Buffer.from(JSON.stringify({username, expires: Date.now() + 86400000})).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET || '').update(payload).digest('base64url');
+  return `${payload}.${signature}`;
 }
 
-function isAuthenticated(req){
-  if(!APP_USERNAME || !APP_PASSWORD || !SESSION_SECRET) return false;
+function sessionUsername(req){
+  if(!SESSION_SECRET) return null;
   const cookies = String(req.headers.cookie || '').split(';').map(value => value.trim());
   const token = cookies.find(value => value.startsWith('cst_session='))?.slice('cst_session='.length);
-  if(!token) return false;
-  const expected = sessionToken();
-  return token.length === expected.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+  if(!token) return null;
+  const [payload, signature] = token.split('.');
+  if(!payload || !signature) return null;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if(signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  try{
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    return data.expires > Date.now() ? data.username : null;
+  }catch(error){
+    return null;
+  }
 }
 
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-app.post('/api/login', (req, res) => {
+app.get('/register', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
+app.post('/api/login', async (req, res) => {
   const {username, password} = req.body || {};
-  if(!APP_USERNAME || !APP_PASSWORD || !SESSION_SECRET){
+  if(!pool || !SESSION_SECRET){
     return res.status(503).json({error: 'Login is not configured on the server'});
   }
-  if(username !== APP_USERNAME || password !== APP_PASSWORD){
+  const result = await pool.query('SELECT username, password_hash FROM users WHERE username = $1', [String(username || '').trim().toLowerCase()]);
+  if(!result.rowCount || !(await bcrypt.compare(String(password || ''), result.rows[0].password_hash))){
     return res.status(401).json({error: 'Invalid username or password'});
   }
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `cst_session=${sessionToken()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${secure}`);
+  res.setHeader('Set-Cookie', `cst_session=${sessionToken(result.rows[0].username)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${secure}`);
   res.json({ok: true});
+});
+
+app.post('/api/register', async (req, res) => {
+  const displayName = String(req.body?.displayName || '').trim();
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if(!pool) return res.status(503).json({error: 'Database is not configured'});
+  if(displayName.length < 2 || username.length < 3 || password.length < 8){
+    return res.status(400).json({error: 'Enter a name, a user ID of 3+ characters, and a password of 8+ characters'});
+  }
+  try{
+    const passwordHash = await bcrypt.hash(password, 12);
+    await pool.query('INSERT INTO users (display_name, username, password_hash) VALUES ($1, $2, $3)', [displayName, username, passwordHash]);
+    res.json({ok: true});
+  }catch(error){
+    if(error.code === '23505') return res.status(409).json({error: 'That user ID already exists'});
+    console.error('Registration failed:', error);
+    res.status(500).json({error: 'Could not create user'});
+  }
 });
 
 app.post('/api/logout', (req, res) => {
@@ -59,7 +94,7 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.use((req, res, next) => {
-  if(isAuthenticated(req)) return next();
+  if(sessionUsername(req)) return next();
   if(req.path.startsWith('/api/')) return res.status(401).json({error: 'Login required'});
   res.redirect('/login');
 });
@@ -107,7 +142,22 @@ async function ensureDatabase(){
       id BIGSERIAL PRIMARY KEY,
       data JSONB NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGSERIAL PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
+  if(APP_USERNAME && APP_PASSWORD){
+    const passwordHash = await bcrypt.hash(APP_PASSWORD, 12);
+    await pool.query(`
+      INSERT INTO users (display_name, username, password_hash)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (username) DO NOTHING
+    `, [APP_USERNAME, APP_USERNAME.toLowerCase(), passwordHash]);
+  }
 }
 
 app.get('/api/data', async (req, res) => {
