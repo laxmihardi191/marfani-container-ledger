@@ -80,6 +80,24 @@ app.use((req, res, next) => {
   res.redirect('/login');
 });
 
+app.get('/change-password', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'change-password.html'));
+});
+
+app.patch('/api/me/password', async (req, res) => {
+  const username = sessionUsername(req);
+  const currentPassword = String(req.body?.currentPassword || '');
+  const newPassword = String(req.body?.newPassword || '');
+  if(newPassword.length < 8) return res.status(400).json({error: 'New password must be at least 8 characters'});
+  const result = await pool.query('SELECT password_hash FROM users WHERE username = $1', [username]);
+  if(!result.rowCount || !(await bcrypt.compare(currentPassword, result.rows[0].password_hash))){
+    return res.status(401).json({error: 'Current password is incorrect'});
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await pool.query('UPDATE users SET password_hash = $1 WHERE username = $2', [passwordHash, username]);
+  res.json({ok: true});
+});
+
 async function requireAdmin(req, res, next){
   if(!pool) return res.status(503).json({error: 'Database is not configured'});
   const username = sessionUsername(req);
