@@ -278,9 +278,21 @@
   .shipment-table tbody tr:nth-child(even){background:#DDEBF7;}
   .shipment-table tbody tr:nth-child(odd){background:#F5F9FD;}
   .shipment-table tbody tr:hover{background:#C6E0B4;}
+  .shipment-table tbody tr.selected{background:#B7E1CD;outline:2px solid var(--steel);outline-offset:-2px;}
   .shipment-table .remark-cell{min-width:210px; white-space:normal; text-align:left; font-family:'IBM Plex Sans',sans-serif;}
   .shipment-table .eta-cell{background:#B7E1CD;}
   .shipment-table .free-cell{color:#D60000; font-weight:700;}
+  .detail-view{margin-top:22px;padding:18px;background:#F1F4F9;border:1px solid #E1E7F0;border-radius:8px;}
+  .detail-view h2{font:700 13px 'IBM Plex Sans',sans-serif;color:#526A8A;text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px;}
+  .detail-section{margin-top:18px;}
+  .detail-section h3{font:700 12px 'IBM Plex Sans',sans-serif;color:#526A8A;text-transform:uppercase;margin:0 0 8px;}
+  .detail-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;}
+  .detail-card{background:#fff;border:1px solid #E1E7F0;border-radius:8px;padding:12px;min-height:70px;}
+  .detail-card .label{font-size:10px;color:#526A8A;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+  .detail-card .value{font-size:14px;color:#142A4D;word-break:break-word;}
+  .detail-card .value.badge{display:inline-block;background:#D2F6E2;color:#07845F;border-radius:14px;padding:4px 9px;font-weight:700;font-size:12px;}
+  @media (max-width:900px){.detail-grid{grid-template-columns:repeat(2,minmax(140px,1fr));}}
+  @media (max-width:600px){.detail-grid{grid-template-columns:1fr;}}
   table{
     border-collapse:collapse;
     width:100%;
@@ -449,6 +461,10 @@
           <tbody id="shipBody"></tbody>
         </table>
       </div>
+      <section class="detail-view" id="shipmentDetail" hidden>
+        <h2>Shipment details</h2>
+        <div id="detailSections"></div>
+      </section>
     </div>
 
     <div class="tab-panel" id="tab-daywise">
@@ -478,6 +494,7 @@ let daywiseRows = [];   // parsed Daywise rows
 let vendorChart, statusChart, daywiseChart, shippingLineChart, etaChart;
 let refreshTimer = null;
 let newDataMode = false;
+let selectedShipment = null;
 
 let SHIP_COLS = [
   {key:'serial', label:'S. N.'},
@@ -776,7 +793,7 @@ function renderShipTable(){
   });
 
   const body = document.getElementById('shipBody');
-  body.innerHTML = rows.map(r => newDataMode ? `<tr>${SHIP_COLS.map(column => {
+  body.innerHTML = rows.map(r => newDataMode ? `<tr class="${selectedShipment === r ? 'selected' : ''}" data-row-index="${shipRows.indexOf(r)}">${SHIP_COLS.map(column => {
     const value = r._cells[column.key];
     const text = value instanceof Date ? fmtDate(value) : (value ?? '');
     const lowerLabel = column.label.toLowerCase();
@@ -805,7 +822,39 @@ function renderShipTable(){
     <td class="remark-cell">${r.remarks ?? ''}</td>
   </tr>`).join('');
 
+  body.querySelectorAll('tr[data-row-index]').forEach(row => row.addEventListener('click', () => {
+    selectedShipment = shipRows[Number(row.dataset.rowIndex)];
+    renderShipTable();
+    renderShipmentDetail();
+  }));
+
   document.getElementById('shipCount').textContent = rows.length + ' of ' + shipRows.length + ' shipments';
+}
+
+function renderShipmentDetail(){
+  const detail = document.getElementById('shipmentDetail');
+  if(!selectedShipment || !newDataMode){ detail.hidden = true; return; }
+  detail.hidden = false;
+  const cells = selectedShipment._cells || {};
+  const fields = SHIP_COLS.map(column => ({label:column.label, value:cells[column.key]})).filter(field => field.value !== null && field.value !== undefined && field.value !== '');
+  const groups = [
+    {name:'Shipment', test:field => /job|container|eta|mbl|line|size|last date|party|composition|grade|sales|order|bl|vendor|entity/i.test(field.label)},
+    {name:'Documentation', test:field => /boe|igm|inw|ooc|doc|document|exam|prior|location|cha|free/i.test(field.label)},
+    {name:'Cargo', test:field => /weight|qty|quantity|description|shipper|charge|amount|duty|rate|payable|payment|advance|total|remark/i.test(field.label)},
+  ];
+  const used = new Set();
+  const sectionHtml = groups.map(group => {
+    const groupFields = fields.filter(field => !used.has(field.label) && group.test(field));
+    groupFields.forEach(field => used.add(field.label));
+    if(!groupFields.length) return '';
+    return `<div class="detail-section"><h3>${group.name}</h3><div class="detail-grid">${groupFields.map(field => {
+      const value = field.value instanceof Date ? fmtDate(field.value) : String(field.value);
+      const badge = /status|boe|igm|inw|ooc|eta/i.test(field.label);
+      return `<div class="detail-card"><div class="label">${field.label}</div><div class="value ${badge ? 'badge' : ''}">${value}</div></div>`;
+    }).join('')}</div></div>`;
+  }).join('');
+  const otherFields = fields.filter(field => !used.has(field.label));
+  document.getElementById('detailSections').innerHTML = sectionHtml + (otherFields.length ? `<div class="detail-section"><h3>Other</h3><div class="detail-grid">${otherFields.map(field => `<div class="detail-card"><div class="label">${field.label}</div><div class="value">${field.value}</div></div>`).join('')}</div></div>` : '');
 }
 
 function renderDaywise(){
