@@ -24,6 +24,10 @@ const pool = process.env.DATABASE_URL ? new Pool({
 
 app.use(express.json({ limit: '10mb' }));
 
+app.get('/health', (req, res) => {
+  res.status(200).json({ok: true, service: 'marfani-steel-group'});
+});
+
 function sessionToken(username, displayName){
   const payload = Buffer.from(JSON.stringify({username, displayName, expires: Date.now() + 86400000})).toString('base64url');
   const signature = crypto.createHmac('sha256', SESSION_SECRET || '').update(payload).digest('base64url');
