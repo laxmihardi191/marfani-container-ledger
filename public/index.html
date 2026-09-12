@@ -62,6 +62,7 @@
     font-size:12.5px;
     color:var(--ink-soft);
   }
+  .logout-btn{margin-top:8px; padding:5px 10px; font-size:11px;}
   .status-dot{
     display:inline-block;
     width:8px;height:8px;
@@ -307,6 +308,7 @@
   <div class="status-block">
     <div><span class="status-dot" id="statusDot"></span><span id="statusText">Awaiting data</span></div>
     <div id="lastSync">No sync yet</div>
+    <button class="logout-btn" id="logoutBtn" type="button">Log out</button>
   </div>
 </div>
 
@@ -740,6 +742,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 document.getElementById('searchShip').addEventListener('input', renderShipTable);
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/logout', {method:'POST'});
+  window.location.href = '/login';
+});
 loadFromDatabase();
 </script>
 </body>
