@@ -423,12 +423,13 @@
 
 <script>
 /* ---------------- state ---------------- */
-let shipRows = [];      // parsed Shipmement Costing rows (objects)
+let shipRows = [];      // parsed shipment rows (objects)
 let daywiseRows = [];   // parsed Daywise rows
 let vendorChart, statusChart, daywiseChart;
 let refreshTimer = null;
+let newDataMode = false;
 
-const SHIP_COLS = [
+let SHIP_COLS = [
   {key:'serial', label:'S. N.'},
   {key:'bl6', label:'Last 6 Digit BL No'},
   {key:'orderStatus', label:'Order Status'},
@@ -484,16 +485,28 @@ function parseWorkbook(data){
   const wb = XLSX.read(data, {type:'array', cellDates:true});
 
   const newDataSheetName = wb.SheetNames.find(n => n.toLowerCase().trim() === 'new data');
+  newDataMode = Boolean(newDataSheetName);
   if(newDataSheetName){
     const arr = XLSX.utils.sheet_to_json(wb.Sheets[newDataSheetName], {header:1, defval:null, blankrows:true, raw:true});
     const headerIndex = arr.findIndex(row => row && row.some(cell => String(cell || '').toLowerCase().includes('party name')));
     const startIndex = headerIndex >= 0 ? headerIndex + 1 : 1;
+    const headers = (arr[headerIndex >= 0 ? headerIndex : 0] || []).map((value, index) => String(value || `Column ${index + 1}`).trim() || `Column ${index + 1}`);
+    const usedHeaders = {};
+    SHIP_COLS = headers.map((label, index) => {
+      const baseKey = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || `column_${index + 1}`;
+      usedHeaders[baseKey] = (usedHeaders[baseKey] || 0) + 1;
+      const key = usedHeaders[baseKey] === 1 ? baseKey : `${baseKey}_${usedHeaders[baseKey]}`;
+      return {key, label, index};
+    });
     shipRows = [];
     for(let i=startIndex; i<arr.length; i++){
       const r = arr[i];
       if(!r || r.every(cell => cell === null || cell === undefined || cell === '')) continue;
       if(String(r[0] || '').toLowerCase() === 'total') continue;
+      const cells = {};
+      SHIP_COLS.forEach(column => { cells[column.key] = r[column.index]; });
       shipRows.push({
+        _cells: cells,
         serial: r[0] ?? i - startIndex + 1,
         bl6: r[1], orderStatus: r[2], soNo: r[3], vendor: r[4], product: r[5], entity: r[6],
         containerCount: r[7], etaDate: r[8], freeTill: r[9], docStatus: r[10], chaName: r[11],
@@ -658,7 +671,13 @@ function renderShipTable(){
   });
 
   const body = document.getElementById('shipBody');
-  body.innerHTML = rows.map(r => `<tr>
+  body.innerHTML = rows.map(r => newDataMode ? `<tr>${SHIP_COLS.map(column => {
+    const value = r._cells[column.key];
+    const text = value instanceof Date ? fmtDate(value) : (value ?? '');
+    const lowerLabel = column.label.toLowerCase();
+    const className = lowerLabel.includes('eta') ? 'eta-cell' : lowerLabel.includes('free') ? 'free-cell' : lowerLabel.includes('remark') ? 'remark-cell' : '';
+    return `<td class="${className}">${text}</td>`;
+  }).join('')}</tr>` : `<tr>
     <td>${r.serial ?? ''}</td>
     <td>${r.bl6 ?? ''}</td>
     <td><span class="pill ${statusPillClass(r.orderStatus)}">${r.orderStatus ?? '—'}</span></td>
