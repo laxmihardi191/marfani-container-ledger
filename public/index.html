@@ -519,8 +519,8 @@ function parseWorkbook(data){
 
   // ---- Shipmement Costing sheet ----
   const shipSheetName = newDataSheetName ? null : wb.SheetNames.find(n => n.toLowerCase().includes('shipmement') || n.toLowerCase().includes('shipment costing'));
-  shipRows = [];
   if(shipSheetName){
+    shipRows = [];
     const ws = wb.Sheets[shipSheetName];
     const arr = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, blankrows:true, raw:true});
     // header assumed at row index 2 (row 3 in sheet); data from index 4 (row 5) onward
