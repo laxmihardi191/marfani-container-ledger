@@ -240,6 +240,22 @@
     border:1px solid var(--line);
     background:var(--card-bg);
   }
+  .shipment-table table{min-width:1900px;}
+  .shipment-table thead th{
+    background:#5B9BD5;
+    color:#fff;
+    border:1px solid rgba(27,36,48,.45);
+    text-align:center;
+    white-space:normal;
+    min-width:82px;
+  }
+  .shipment-table tbody td{border:1px solid rgba(27,36,48,.35); text-align:center;}
+  .shipment-table tbody tr:nth-child(even){background:#DDEBF7;}
+  .shipment-table tbody tr:nth-child(odd){background:#F5F9FD;}
+  .shipment-table tbody tr:hover{background:#C6E0B4;}
+  .shipment-table .remark-cell{min-width:210px; white-space:normal; text-align:left; font-family:'IBM Plex Sans',sans-serif;}
+  .shipment-table .eta-cell{background:#B7E1CD;}
+  .shipment-table .free-cell{color:#D60000; font-weight:700;}
   table{
     border-collapse:collapse;
     width:100%;
@@ -377,7 +393,7 @@
         <input type="text" id="searchShip" placeholder="Search vendor, BL no., product…" style="min-width:280px;">
         <span id="shipCount" style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--grey);"></span>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap shipment-table">
         <table id="shipTable">
           <thead><tr id="shipHead"></tr></thead>
           <tbody id="shipBody"></tbody>
@@ -413,17 +429,26 @@ let vendorChart, statusChart, daywiseChart;
 let refreshTimer = null;
 
 const SHIP_COLS = [
-  {key:'bl6', label:'BL (last 6)'},
+  {key:'serial', label:'S. N.'},
+  {key:'bl6', label:'Last 6 Digit BL No'},
   {key:'orderStatus', label:'Order Status'},
-  {key:'entity', label:'Entity'},
-  {key:'vendor', label:'Vendor', text:true},
-  {key:'product', label:'Product', text:true},
-  {key:'invQty', label:'Inv. Qty (MT)'},
-  {key:'rate', label:'Rate (USD)'},
-  {key:'landingCost', label:'Landing Cost (INR)'},
-  {key:'landingPerKg', label:'Cost/KG (INR)'},
-  {key:'shipStatus', label:'Shipment Status'},
-  {key:'docStatus', label:'Documents Status'},
+  {key:'soNo', label:'Sales Order No.'},
+  {key:'vendor', label:'Party Name', text:true},
+  {key:'product', label:'Composition / Grade', text:true},
+  {key:'entity', label:'Entity Name'},
+  {key:'containerCount', label:'No. of Container'},
+  {key:'etaDate', label:'Cont. ETA Date'},
+  {key:'freeTill', label:'Free Till'},
+  {key:'docStatus', label:'Current Document Status'},
+  {key:'chaName', label:'CHA Name'},
+  {key:'qtyKgs', label:'Qty In KGS'},
+  {key:'rate', label:'Rate per MTS (in USD)'},
+  {key:'duty', label:'DUTY AMT APPROX in INR'},
+  {key:'advance', label:'Advance paid in USD'},
+  {key:'amountToBePaid', label:'AMOUNT TO BE PAID IN USD'},
+  {key:'payableRs', label:'Amount payable in RS (APPROX)'},
+  {key:'totalRequired', label:'Total Amount required (in INR)'},
+  {key:'remarks', label:'Remarks', text:true},
 ];
 
 /* ---------------- helpers ---------------- */
@@ -458,8 +483,29 @@ function showError(msg){
 function parseWorkbook(data){
   const wb = XLSX.read(data, {type:'array', cellDates:true});
 
+  const newDataSheetName = wb.SheetNames.find(n => n.toLowerCase().trim() === 'new data');
+  if(newDataSheetName){
+    const arr = XLSX.utils.sheet_to_json(wb.Sheets[newDataSheetName], {header:1, defval:null, blankrows:true, raw:true});
+    const headerIndex = arr.findIndex(row => row && row.some(cell => String(cell || '').toLowerCase().includes('party name')));
+    const startIndex = headerIndex >= 0 ? headerIndex + 1 : 1;
+    shipRows = [];
+    for(let i=startIndex; i<arr.length; i++){
+      const r = arr[i];
+      if(!r || r.every(cell => cell === null || cell === undefined || cell === '')) continue;
+      if(String(r[0] || '').toLowerCase() === 'total') continue;
+      shipRows.push({
+        serial: r[0] ?? i - startIndex + 1,
+        bl6: r[1], orderStatus: r[2], soNo: r[3], vendor: r[4], product: r[5], entity: r[6],
+        containerCount: r[7], etaDate: r[8], freeTill: r[9], docStatus: r[10], chaName: r[11],
+        qtyKgs: toNum(r[12]), rate: toNum(r[13]), duty: toNum(r[14]), advance: toNum(r[15]),
+        amountToBePaid: toNum(r[16]), payableRs: toNum(r[17]), totalRequired: toNum(r[18]), remarks: r[19],
+        landingCost: toNum(r[18]), landingPerKg: null, shipStatus: r[10],
+      });
+    }
+  }
+
   // ---- Shipmement Costing sheet ----
-  const shipSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('shipmement') || n.toLowerCase().includes('shipment costing'));
+  const shipSheetName = newDataSheetName ? null : wb.SheetNames.find(n => n.toLowerCase().includes('shipmement') || n.toLowerCase().includes('shipment costing'));
   shipRows = [];
   if(shipSheetName){
     const ws = wb.Sheets[shipSheetName];
@@ -613,17 +659,26 @@ function renderShipTable(){
 
   const body = document.getElementById('shipBody');
   body.innerHTML = rows.map(r => `<tr>
+    <td>${r.serial ?? ''}</td>
     <td>${r.bl6 ?? ''}</td>
     <td><span class="pill ${statusPillClass(r.orderStatus)}">${r.orderStatus ?? '—'}</span></td>
-    <td>${r.entity ?? ''}</td>
+    <td>${r.soNo ?? ''}</td>
     <td class="text">${r.vendor ?? ''}</td>
     <td class="text">${r.product ?? ''}</td>
-    <td>${fmtNum(r.invQty,2)}</td>
-    <td>${r.rate ? fmtNum(r.rate,2) : '—'}</td>
-    <td>${fmtNum(r.landingCost)}</td>
-    <td>${fmtNum(r.landingPerKg,2)}</td>
-    <td><span class="pill ${statusPillClass(r.shipStatus)}">${r.shipStatus ?? '—'}</span></td>
+    <td>${r.entity ?? ''}</td>
+    <td>${r.containerCount ?? ''}</td>
+    <td class="eta-cell">${fmtDate(r.etaDate)}</td>
+    <td class="free-cell">${fmtDate(r.freeTill)}</td>
     <td>${r.docStatus ?? ''}</td>
+    <td>${r.chaName ?? ''}</td>
+    <td>${fmtNum(r.qtyKgs,2)}</td>
+    <td>${fmtNum(r.rate,2)}</td>
+    <td>${fmtNum(r.duty,2)}</td>
+    <td>${fmtNum(r.advance,2)}</td>
+    <td>${fmtNum(r.amountToBePaid,2)}</td>
+    <td>${fmtNum(r.payableRs,2)}</td>
+    <td>${fmtNum(r.totalRequired,2)}</td>
+    <td class="remark-cell">${r.remarks ?? ''}</td>
   </tr>`).join('');
 
   document.getElementById('shipCount').textContent = rows.length + ' of ' + shipRows.length + ' shipments';
