@@ -24,13 +24,13 @@ const pool = process.env.DATABASE_URL ? new Pool({
 
 app.use(express.json({ limit: '10mb' }));
 
-function sessionToken(username){
-  const payload = Buffer.from(JSON.stringify({username, expires: Date.now() + 86400000})).toString('base64url');
+function sessionToken(username, displayName){
+  const payload = Buffer.from(JSON.stringify({username, displayName, expires: Date.now() + 86400000})).toString('base64url');
   const signature = crypto.createHmac('sha256', SESSION_SECRET || '').update(payload).digest('base64url');
   return `${payload}.${signature}`;
 }
 
-function sessionUsername(req){
+function sessionData(req){
   if(!SESSION_SECRET) return null;
   const cookies = String(req.headers.cookie || '').split(';').map(value => value.trim());
   const token = cookies.find(value => value.startsWith('cst_session='))?.slice('cst_session='.length);
@@ -41,10 +41,14 @@ function sessionUsername(req){
   if(signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   try{
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    return data.expires > Date.now() ? data.username : null;
+    return data.expires > Date.now() ? data : null;
   }catch(error){
     return null;
   }
+}
+
+function sessionUsername(req){
+  return sessionData(req)?.username || null;
 }
 
 app.get('/login', (req, res) => {
@@ -60,12 +64,12 @@ app.post('/api/login', async (req, res) => {
   if(!pool || !SESSION_SECRET){
     return res.status(503).json({error: 'Login is not configured on the server'});
   }
-  const result = await pool.query('SELECT username, password_hash FROM users WHERE username = $1', [String(username || '').trim().toLowerCase()]);
+  const result = await pool.query('SELECT username, display_name, password_hash FROM users WHERE username = $1', [String(username || '').trim().toLowerCase()]);
   if(!result.rowCount || !(await bcrypt.compare(String(password || ''), result.rows[0].password_hash))){
     return res.status(401).json({error: 'Invalid username or password'});
   }
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `cst_session=${sessionToken(result.rows[0].username)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${secure}`);
+  res.setHeader('Set-Cookie', `cst_session=${sessionToken(result.rows[0].username, result.rows[0].display_name)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${secure}`);
   res.json({ok: true});
 });
 
@@ -112,8 +116,9 @@ app.get('/admin/users', requireAdmin, (req, res) => {
 });
 
 app.get('/api/me', async (req, res) => {
-  const result = await pool.query('SELECT display_name, username, role FROM users WHERE username = $1', [sessionUsername(req)]);
-  res.json(result.rows[0] || {});
+  const session = sessionData(req);
+  const result = await pool.query('SELECT display_name, username, role FROM users WHERE username = $1', [session.username]);
+  res.json(result.rows[0] || {display_name: session.displayName, username: session.username, role: 'user'});
 });
 
 app.post('/api/admin/users', requireAdmin, async (req, res) => {

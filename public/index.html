@@ -825,12 +825,16 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   window.location.href = '/login';
 });
 async function loadCurrentUser(){
-  const response = await fetch('/api/me', {cache:'no-store'});
-  if(!response.ok) return;
-  const user = await response.json();
-  if(user.display_name) document.getElementById('welcomeUser').textContent = 'Welcome, ' + user.display_name;
-  if(user.role !== 'admin') document.getElementById('syncbar').style.display = 'none';
-  if(user.role === 'admin') document.getElementById('adminLink').style.display = 'inline-block';
+  try{
+    const response = await fetch('/api/me', {cache:'no-store'});
+    if(!response.ok) return;
+    const user = await response.json();
+    if(user.display_name) document.getElementById('welcomeUser').textContent = 'Welcome, ' + user.display_name;
+    if(user.role !== 'admin') document.getElementById('syncbar').style.display = 'none';
+    if(user.role === 'admin') document.getElementById('adminLink').style.display = 'inline-block';
+  }catch(error){
+    // Keep dashboard initialization running if the profile request is temporarily unavailable.
+  }
 }
 loadCurrentUser();
 loadFromDatabase();
