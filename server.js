@@ -65,8 +65,19 @@ app.get('/api/cloud-file', async (req, res) => {
     return res.status(400).json({error: 'A public http(s) file URL is required'});
   }
   try{
-    const response = await fetch(sourceUrl, {redirect: 'follow'});
+    const downloadUrl = sourceUrl + (sourceUrl.includes('?') ? '&' : '?') + 'download=1';
+    let response = await fetch(downloadUrl, {
+      redirect: 'follow',
+      headers: {'User-Agent': 'Marfani-Container-Ledger/1.0'},
+    });
+    if(!response.ok){
+      response = await fetch(sourceUrl, {redirect: 'follow'});
+    }
     if(!response.ok) return res.status(response.status).json({error: `Cloud file returned HTTP ${response.status}`});
+    const contentType = response.headers.get('content-type') || '';
+    if(contentType.includes('text/html')){
+      return res.status(422).json({error: 'This SharePoint link opens a preview page. Set sharing to Anyone with the link can view and copy the link again.'});
+    }
     const buffer = Buffer.from(await response.arrayBuffer());
     res.type('application/octet-stream').send(buffer);
   }catch(error){

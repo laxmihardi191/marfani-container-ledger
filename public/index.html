@@ -681,11 +681,14 @@ document.getElementById('fetchBtn').addEventListener('click', async () => {
   setStatus(false, 'Syncing…');
   try{
     const res = await fetch('/api/cloud-file?url=' + encodeURIComponent(url), {cache:'no-store'});
-    if(!res.ok) throw new Error('HTTP ' + res.status);
+    if(!res.ok){
+      const details = await res.json().catch(() => ({}));
+      throw new Error(details.error || 'HTTP ' + res.status);
+    }
     const buf = await res.arrayBuffer();
     loadFromArrayBuffer(buf, 'cloud link');
   }catch(e){
-    showError('Fetch failed (' + e.message + '). This is usually a CORS or sharing-permission issue — try the drag-and-drop upload instead, or see the setup notes.');
+    showError('Cloud sync failed: ' + e.message + ' Try the drag-and-drop upload if the link requires sign-in.');
     setStatus(false, 'Sync failed');
   }
 });
