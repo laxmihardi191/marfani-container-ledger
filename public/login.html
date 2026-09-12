@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in - Marfani Steels</title>
+<style>
+  :root{--paper:#EDE8DE;--ink:#1B2430;--rust:#B5622F;--line:rgba(27,36,48,.18)}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--paper);color:var(--ink);font-family:Georgia,serif}
+  main{width:min(420px,calc(100% - 40px));border-top:3px solid var(--ink);padding:28px 0}
+  h1{margin:0 0 8px;font-size:32px;font-weight:600}
+  p{margin:0 0 28px;color:#4A5361;font-family:Arial,sans-serif;font-size:14px}
+  label{display:block;margin:16px 0 6px;font:600 12px Arial,sans-serif;text-transform:uppercase;letter-spacing:.06em}
+  input{width:100%;padding:12px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:16px}
+  button{width:100%;margin-top:24px;padding:12px;border:0;background:var(--ink);color:var(--paper);font-weight:700;font-size:14px;cursor:pointer}
+  #error{min-height:20px;margin-top:16px;color:#A83232;font:14px Arial,sans-serif}
+</style>
+</head>
+<body>
+<main>
+  <h1>Marfani Steels</h1>
+  <p>Container Cost Ledger</p>
+  <form id="loginForm">
+    <label for="username">User ID</label>
+    <input id="username" name="username" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <div id="error" role="alert"></div>
+  </form>
+</main>
+<script>
+  document.getElementById('loginForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const response = await fetch('/api/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:form.get('username'), password:form.get('password')})
+    });
+    if(response.ok){ window.location.href = '/'; return; }
+    const result = await response.json().catch(() => ({}));
+    document.getElementById('error').textContent = result.error || 'Sign in failed';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marfani Steels — Container Cost Ledger</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EDE8DE;
+    --paper-dim:#E2DCCE;
+    --ink:#1B2430;
+    --ink-soft:#4A5361;
+    --rust:#B5622F;
+    --rust-dim:#D98E5F;
+    --steel:#3C6E71;
+    --grey:#8C8577;
+    --alert:#A83232;
+    --good:#3C6E71;
+    --line: rgba(27,36,48,0.14);
+    --card-bg: #F5F1E8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--rust-dim); color:#fff;}
+
+  /* ---------- Masthead ---------- */
+  .masthead{
+    border-bottom:2px solid var(--ink);
+    padding:28px 32px 20px;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:16px;
+  }
+  .masthead h1{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:clamp(28px, 4vw, 42px);
+    margin:0 0 4px;
+    letter-spacing:-0.01em;
+  }
+  .masthead .sub{
+    font-size:14px;
+    color:var(--ink-soft);
+    font-style:italic;
+    font-family:'Fraunces', serif;
+  }
+  .status-block{
+    text-align:right;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    color:var(--ink-soft);
+  }
+  .status-dot{
+    display:inline-block;
+    width:8px;height:8px;
+    border-radius:50%;
+    margin-right:6px;
+    background:var(--grey);
+    position:relative;
+    top:-1px;
+  }
+  .status-dot.live{background:var(--steel); box-shadow:0 0 0 3px rgba(60,110,113,0.18);}
+  .status-dot.stale{background:var(--rust);}
+
+  /* ---------- Sync control bar ---------- */
+  .syncbar{
+    padding:16px 32px;
+    background:var(--paper-dim);
+    border-bottom:1px solid var(--line);
+    display:flex;
+    gap:24px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .sync-group{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .sync-group label{font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600;}
+  input[type=text]{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    padding:7px 10px;
+    border:1px solid var(--line);
+    background:#fff;
+    border-radius:2px;
+    min-width:260px;
+    color:var(--ink);
+  }
+  select{
+    font-family:'IBM Plex Sans';
+    font-size:12.5px;
+    padding:7px 8px;
+    border:1px solid var(--line);
+    background:#fff;
+    border-radius:2px;
+  }
+  button{
+    font-family:'IBM Plex Sans';
+    font-weight:600;
+    font-size:12.5px;
+    padding:8px 16px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    border-radius:2px;
+    cursor:pointer;
+    transition:opacity .15s ease;
+  }
+  button:hover{opacity:.85;}
+  button.ghost{
+    background:transparent;
+    color:var(--ink);
+  }
+  .drop-zone{
+    border:1.5px dashed var(--ink-soft);
+    padding:8px 14px;
+    font-size:12px;
+    color:var(--ink-soft);
+    border-radius:3px;
+    cursor:pointer;
+    font-family:'IBM Plex Mono', monospace;
+  }
+  .drop-zone.dragover{ border-color:var(--rust); color:var(--rust); background:rgba(181,98,47,0.06); }
+  #fileInput{display:none;}
+  .error-msg{
+    font-size:12px;
+    color:var(--alert);
+    font-family:'IBM Plex Mono', monospace;
+  }
+
+  /* ---------- KPI strip ---------- */
+  .kpis{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(190px,1fr));
+    gap:1px;
+    background:var(--line);
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+  }
+  .kpi{
+    background:var(--card-bg);
+    padding:20px 24px;
+  }
+  .kpi .label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.07em;
+    color:var(--ink-soft);
+    font-weight:600;
+    margin-bottom:8px;
+  }
+  .kpi .value{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:26px;
+    font-weight:600;
+    color:var(--ink);
+  }
+  .kpi .value.rust{color:var(--rust);}
+  .kpi .value.steel{color:var(--steel);}
+  .kpi .foot{
+    font-size:11.5px;
+    color:var(--grey);
+    margin-top:4px;
+  }
+
+  /* ---------- Main layout ---------- */
+  .content{padding:32px;}
+  .charts-row{
+    display:grid;
+    grid-template-columns:1.4fr 1fr;
+    gap:24px;
+    margin-bottom:36px;
+  }
+  @media (max-width:900px){ .charts-row{grid-template-columns:1fr;} }
+  .panel{
+    background:var(--card-bg);
+    border:1px solid var(--line);
+    padding:20px 22px 16px;
+  }
+  .panel h2{
+    font-family:'Fraunces', serif;
+    font-size:17px;
+    font-weight:600;
+    margin:0 0 14px;
+    padding-bottom:10px;
+    border-bottom:1px solid var(--line);
+  }
+  .chart-holder{position:relative; height:260px;}
+
+  /* ---------- Tabs ---------- */
+  .tabs{
+    display:flex;
+    gap:2px;
+    margin-bottom:0;
+    border-bottom:2px solid var(--ink);
+  }
+  .tab-btn{
+    font-family:'Fraunces', serif;
+    font-size:14.5px;
+    font-weight:600;
+    padding:10px 20px 8px;
+    background:var(--paper-dim);
+    border:1px solid var(--line);
+    border-bottom:none;
+    color:var(--ink-soft);
+    cursor:pointer;
+    border-radius:0;
+  }
+  .tab-btn.active{
+    background:var(--card-bg);
+    color:var(--ink);
+    border-color:var(--ink);
+  }
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  /* ---------- Table ---------- */
+  .table-toolbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 0;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .table-wrap{
+    overflow-x:auto;
+    border:1px solid var(--line);
+    background:var(--card-bg);
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    font-size:13px;
+    min-width:900px;
+  }
+  thead th{
+    text-align:left;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:var(--ink-soft);
+    padding:10px 12px;
+    border-bottom:2px solid var(--ink);
+    background:var(--paper-dim);
+    position:sticky;
+    top:0;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  thead th:hover{color:var(--ink);}
+  tbody td{
+    padding:9px 12px;
+    border-bottom:1px solid var(--line);
+    white-space:nowrap;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+  }
+  tbody td.text{font-family:'IBM Plex Sans', sans-serif; font-size:12.5px; white-space:normal; min-width:160px;}
+  tbody tr:hover{background:rgba(181,98,47,0.06);}
+  .pill{
+    display:inline-block;
+    padding:2px 9px;
+    border-radius:10px;
+    font-size:11px;
+    font-family:'IBM Plex Sans';
+    font-weight:600;
+  }
+  .pill.delivered, .pill.closed, .pill.released{background:rgba(60,110,113,0.15); color:var(--steel);}
+  .pill.transit, .pill.active{background:rgba(181,98,47,0.15); color:var(--rust);}
+  .pill.other{background:rgba(140,133,119,0.18); color:var(--grey);}
+
+  .empty-state{
+    padding:60px 30px;
+    text-align:center;
+    color:var(--ink-soft);
+    font-family:'Fraunces', serif;
+    font-size:16px;
+  }
+  .empty-state .sub{font-family:'IBM Plex Sans'; font-size:13px; margin-top:8px; color:var(--grey);}
+
+  footer{
+    padding:20px 32px 40px;
+    font-size:11.5px;
+    color:var(--grey);
+    font-family:'IBM Plex Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div>
+    <h1>Marfani Steels — Container Cost Ledger</h1>
+    <div class="sub">Shipment costing &amp; fund planning, drawn live from your workbook</div>
+  </div>
+  <div class="status-block">
+    <div><span class="status-dot" id="statusDot"></span><span id="statusText">Awaiting data</span></div>
+    <div id="lastSync">No sync yet</div>
+  </div>
+</div>
+
+<div class="syncbar">
+  <div class="sync-group">
+    <label>Cloud file link</label>
+    <input type="text" id="sourceUrl" placeholder="Direct-download URL to your .xlsx / .xlsm">
+    <button id="fetchBtn">Sync now</button>
+  </div>
+  <div class="sync-group">
+    <label>Auto-refresh</label>
+    <select id="intervalSelect">
+      <option value="0">Off</option>
+      <option value="30000">Every 30s</option>
+      <option value="60000" selected>Every 1 min</option>
+      <option value="300000">Every 5 min</option>
+    </select>
+  </div>
+  <div class="sync-group">
+    <label>Or drop file</label>
+    <div class="drop-zone" id="dropZone">Drag .xlsm/.xlsx here, or click to choose</div>
+    <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls">
+  </div>
+  <div class="sync-group" id="errorBox"></div>
+</div>
+
+<div class="kpis" id="kpiStrip">
+  <div class="kpi"><div class="label">Total containers</div><div class="value" id="kpiContainers">—</div></div>
+  <div class="kpi"><div class="label">Landing cost (INR)</div><div class="value steel" id="kpiLanding">—</div></div>
+  <div class="kpi"><div class="label">Duty paid (INR)</div><div class="value" id="kpiDuty">—</div></div>
+  <div class="kpi"><div class="label">In-transit</div><div class="value rust" id="kpiTransit">—</div></div>
+  <div class="kpi"><div class="label">Closed / delivered</div><div class="value" id="kpiClosed">—</div></div>
+</div>
+
+<div class="content">
+
+  <div id="emptyState" class="empty-state">
+    Load your Excel file to bring the ledger to life.
+    <div class="sub">Drop your .xlsm above, or paste a live cloud link and hit Sync now.</div>
+  </div>
+
+  <div id="mainBody" style="display:none;">
+
+    <div class="charts-row">
+      <div class="panel">
+        <h2>Landing cost by vendor</h2>
+        <div class="chart-holder"><canvas id="vendorChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>Shipment status</h2>
+        <div class="chart-holder"><canvas id="statusChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="ship">Shipment Costing</button>
+      <button class="tab-btn" data-tab="daywise">Daywise Expenses</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-ship">
+      <div class="table-toolbar">
+        <input type="text" id="searchShip" placeholder="Search vendor, BL no., product…" style="min-width:280px;">
+        <span id="shipCount" style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--grey);"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="shipTable">
+          <thead><tr id="shipHead"></tr></thead>
+          <tbody id="shipBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-daywise">
+      <div class="charts-row" style="margin-top:20px;">
+        <div class="panel" style="grid-column:1/-1;">
+          <h2>Total expenses this week, day wise</h2>
+          <div class="chart-holder"><canvas id="daywiseChart"></canvas></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sr.</th><th>Date</th><th>Day</th><th>Amount (INR)</th></tr></thead>
+          <tbody id="daywiseBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>MARFANI STEELS PRIVATE LIMITED · Container Cost Ledger · data parsed client-side, nothing leaves your browser</footer>
+
+<script>
+/* ---------------- state ---------------- */
+let shipRows = [];      // parsed Shipmement Costing rows (objects)
+let daywiseRows = [];   // parsed Daywise rows
+let vendorChart, statusChart, daywiseChart;
+let refreshTimer = null;
+
+const SHIP_COLS = [
+  {key:'bl6', label:'BL (last 6)'},
+  {key:'orderStatus', label:'Order Status'},
+  {key:'entity', label:'Entity'},
+  {key:'vendor', label:'Vendor', text:true},
+  {key:'product', label:'Product', text:true},
+  {key:'invQty', label:'Inv. Qty (MT)'},
+  {key:'rate', label:'Rate (USD)'},
+  {key:'landingCost', label:'Landing Cost (INR)'},
+  {key:'landingPerKg', label:'Cost/KG (INR)'},
+  {key:'shipStatus', label:'Shipment Status'},
+  {key:'docStatus', label:'Documents Status'},
+];
+
+/* ---------------- helpers ---------------- */
+function fmtNum(n, decimals=0){
+  if(n===null || n===undefined || isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-IN', {maximumFractionDigits:decimals, minimumFractionDigits:decimals});
+}
+function fmtDate(d){
+  if(!d) return '';
+  if(d instanceof Date) return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+  return String(d);
+}
+function statusPillClass(s){
+  if(!s) return 'other';
+  const v = String(s).toLowerCase();
+  if(v.includes('deliver') || v.includes('closed') || v.includes('release')) return 'delivered';
+  if(v.includes('transit') || v.includes('active')) return 'transit';
+  return 'other';
+}
+function setStatus(live, text){
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot ' + (live ? 'live' : 'stale');
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('lastSync').textContent = 'Last synced: ' + new Date().toLocaleTimeString();
+}
+function showError(msg){
+  const box = document.getElementById('errorBox');
+  box.innerHTML = msg ? '<span class="error-msg">' + msg + '</span>' : '';
+}
+
+/* ---------------- workbook parsing ---------------- */
+function parseWorkbook(data){
+  const wb = XLSX.read(data, {type:'array', cellDates:true});
+
+  // ---- Shipmement Costing sheet ----
+  const shipSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('shipmement') || n.toLowerCase().includes('shipment costing'));
+  shipRows = [];
+  if(shipSheetName){
+    const ws = wb.Sheets[shipSheetName];
+    const arr = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, blankrows:true, raw:true});
+    // header assumed at row index 2 (row 3 in sheet); data from index 4 (row 5) onward
+    for(let i=4; i<arr.length; i++){
+      const r = arr[i];
+      if(!r) continue;
+      const bl6 = r[0], vendor = r[6];
+      if((bl6===null || bl6===undefined || bl6==='') && (vendor===null || vendor===undefined || vendor==='')) continue;
+      if(String(bl6).toLowerCase() === 'total') continue;
+      shipRows.push({
+        bl6: r[0], orderStatus: r[1], entity: r[2], blNo: r[3], blDate: r[4],
+        soNo: r[5], vendor: r[6], product: r[7], category: r[8], composition: r[9],
+        portLoading: r[18], portDischarge: r[19], delivery: r[20],
+        invQty: toNum(r[22]), rate: toNum(r[23]), taxable: toNum(r[24]),
+        advance: toNum(r[25]), afterAdv: toNum(r[26]), paidUsd: toNum(r[27]),
+        shipStatus: r[31], docStatus: r[32],
+        doPayment: toNum(r[33]), detention: toNum(r[34]), damage: toNum(r[35]),
+        duty: toNum(r[36]), interest: toNum(r[37]), totalBE: toNum(r[38]),
+        chaInvoice: toNum(r[39]), receivedDate: r[40],
+        landingCost: toNum(r[41]), landingPerKg: toNum(r[42]),
+      });
+    }
+  }
+
+  // ---- Daywise sheet ----
+  const dwSheetName = wb.SheetNames.find(n => n.toLowerCase().includes('daywise'));
+  daywiseRows = [];
+  if(dwSheetName){
+    const ws = wb.Sheets[dwSheetName];
+    const arr = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, blankrows:true, raw:true});
+    // header at row index 5 (row 6); data rows 6.. until a 'Total' marker in col0
+    for(let i=6; i<arr.length; i++){
+      const r = arr[i];
+      if(!r) continue;
+      const sr = r[0];
+      if(sr===null || sr===undefined || sr==='') continue;
+      if(String(sr).toLowerCase() === 'total') break;
+      daywiseRows.push({sr: r[0], date: r[1], day: r[2], amount: toNum(r[3])});
+    }
+  }
+}
+function toNum(v){
+  if(v===null || v===undefined || v==='') return null;
+  if(typeof v === 'number') return v;
+  const n = parseFloat(String(v).replace(/[, ]/g,''));
+  return isNaN(n) ? null : n;
+}
+
+/* ---------------- render ---------------- */
+function renderAll(){
+  if(shipRows.length === 0 && daywiseRows.length === 0){
+    showError('Could not find a "Shipmement Costing" or "Daywise" sheet in that file — check the tab names match your workbook.');
+    return;
+  }
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('mainBody').style.display = 'block';
+  showError('');
+  renderKpis();
+  renderVendorChart();
+  renderStatusChart();
+  renderShipTable();
+  renderDaywise();
+}
+
+function renderKpis(){
+  const totalContainers = shipRows.length;
+  const totalLanding = shipRows.reduce((s,r)=> s + (r.landingCost||0), 0);
+  const totalDuty = shipRows.reduce((s,r)=> s + (r.duty||0), 0);
+  const transit = shipRows.filter(r => String(r.shipStatus||'').toLowerCase().includes('transit') || String(r.orderStatus||'').toLowerCase()==='active').length;
+  const closed = shipRows.filter(r => String(r.orderStatus||'').toLowerCase()==='closed' || String(r.shipStatus||'').toLowerCase().includes('deliver')).length;
+
+  document.getElementById('kpiContainers').textContent = fmtNum(totalContainers);
+  document.getElementById('kpiLanding').textContent = '₹' + fmtNum(totalLanding);
+  document.getElementById('kpiDuty').textContent = '₹' + fmtNum(totalDuty);
+  document.getElementById('kpiTransit').textContent = fmtNum(transit);
+  document.getElementById('kpiClosed').textContent = fmtNum(closed);
+}
+
+function renderVendorChart(){
+  const byVendor = {};
+  shipRows.forEach(r=>{
+    const v = r.vendor || 'Unspecified';
+    byVendor[v] = (byVendor[v]||0) + (r.landingCost||0);
+  });
+  const entries = Object.entries(byVendor).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const ctx = document.getElementById('vendorChart').getContext('2d');
+  if(vendorChart) vendorChart.destroy();
+  vendorChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: entries.map(e => e[0].length>22 ? e[0].slice(0,22)+'…' : e[0]),
+      datasets:[{ data: entries.map(e=>e[1]), backgroundColor:'#B5622F', borderRadius:2, maxBarThickness:28 }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ label: c => '₹' + fmtNum(c.raw) } } },
+      scales:{ x:{ ticks:{ callback:v=>'₹'+fmtNum(v) }, grid:{color:'rgba(27,36,48,0.08)'} }, y:{ grid:{display:false} } }
+    }
+  });
+}
+
+function renderStatusChart(){
+  const counts = {};
+  shipRows.forEach(r=>{
+    const s = r.orderStatus || 'Unknown';
+    counts[s] = (counts[s]||0) + 1;
+  });
+  const labels = Object.keys(counts);
+  const data = Object.values(counts);
+  const palette = ['#3C6E71','#B5622F','#8C8577','#D98E5F','#1B2430'];
+  const ctx = document.getElementById('statusChart').getContext('2d');
+  if(statusChart) statusChart.destroy();
+  statusChart = new Chart(ctx, {
+    type:'doughnut',
+    data:{ labels, datasets:[{ data, backgroundColor: labels.map((_,i)=>palette[i%palette.length]) }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{family:"'IBM Plex Sans'", size:11} } } } }
+  });
+}
+
+let sortState = {key:'landingCost', dir:-1};
+function renderShipTable(){
+  const search = document.getElementById('searchShip').value.trim().toLowerCase();
+  let rows = shipRows.filter(r=>{
+    if(!search) return true;
+    return [r.vendor, r.product, r.bl6, r.blNo, r.category].some(v => String(v||'').toLowerCase().includes(search));
+  });
+  rows.sort((a,b)=>{
+    const av = a[sortState.key], bv = b[sortState.key];
+    if(av===null||av===undefined) return 1;
+    if(bv===null||bv===undefined) return -1;
+    if(typeof av === 'number') return (av-bv)*sortState.dir;
+    return String(av).localeCompare(String(bv)) * sortState.dir;
+  });
+
+  const head = document.getElementById('shipHead');
+  head.innerHTML = SHIP_COLS.map(c => `<th data-key="${c.key}">${c.label}${sortState.key===c.key ? (sortState.dir===1?' ▲':' ▼') : ''}</th>`).join('');
+  head.querySelectorAll('th').forEach(th => th.onclick = () => {
+    const k = th.dataset.key;
+    sortState.dir = (sortState.key===k) ? -sortState.dir : -1;
+    sortState.key = k;
+    renderShipTable();
+  });
+
+  const body = document.getElementById('shipBody');
+  body.innerHTML = rows.map(r => `<tr>
+    <td>${r.bl6 ?? ''}</td>
+    <td><span class="pill ${statusPillClass(r.orderStatus)}">${r.orderStatus ?? '—'}</span></td>
+    <td>${r.entity ?? ''}</td>
+    <td class="text">${r.vendor ?? ''}</td>
+    <td class="text">${r.product ?? ''}</td>
+    <td>${fmtNum(r.invQty,2)}</td>
+    <td>${r.rate ? fmtNum(r.rate,2) : '—'}</td>
+    <td>${fmtNum(r.landingCost)}</td>
+    <td>${fmtNum(r.landingPerKg,2)}</td>
+    <td><span class="pill ${statusPillClass(r.shipStatus)}">${r.shipStatus ?? '—'}</span></td>
+    <td>${r.docStatus ?? ''}</td>
+  </tr>`).join('');
+
+  document.getElementById('shipCount').textContent = rows.length + ' of ' + shipRows.length + ' shipments';
+}
+
+function renderDaywise(){
+  const body = document.getElementById('daywiseBody');
+  body.innerHTML = daywiseRows.map(r => `<tr>
+    <td>${r.sr}</td><td>${fmtDate(r.date)}</td><td class="text">${r.day ?? ''}</td><td>${fmtNum(r.amount)}</td>
+  </tr>`).join('');
+
+  const ctx = document.getElementById('daywiseChart').getContext('2d');
+  if(daywiseChart) daywiseChart.destroy();
+  daywiseChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: daywiseRows.map(r => r.day || fmtDate(r.date)),
+      datasets:[{ data: daywiseRows.map(r=>r.amount), backgroundColor:'#3C6E71', borderRadius:2, maxBarThickness:44 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:c=>'₹'+fmtNum(c.raw) } } },
+      scales:{ y:{ ticks:{ callback:v=>'₹'+fmtNum(v) }, grid:{color:'rgba(27,36,48,0.08)'} }, x:{ grid:{display:false} } }
+    }
+  });
+}
+
+/* ---------------- data loading ---------------- */
+async function loadFromArrayBuffer(buf, sourceLabel){
+  try{
+    parseWorkbook(buf);
+    renderAll();
+    const response = await fetch('/api/data', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({shipRows, daywiseRows}),
+    });
+    if(!response.ok) throw new Error('Database HTTP ' + response.status);
+    setStatus(true, 'Synced to shared database — ' + sourceLabel);
+  }catch(e){
+    showError('File loaded locally, but could not save to the shared database: ' + e.message);
+    setStatus(false, 'Database sync failed');
+  }
+}
+
+async function loadFromDatabase(){
+  try{
+    const response = await fetch('/api/data', {cache:'no-store'});
+    if(!response.ok) return;
+    const data = await response.json();
+    if(!data.shipRows.length && !data.daywiseRows.length) return;
+    shipRows = data.shipRows;
+    daywiseRows = data.daywiseRows;
+    renderAll();
+    setStatus(true, 'Loaded from shared database');
+  }catch(e){
+    setStatus(false, 'Waiting for shared database');
+  }
+}
+
+document.getElementById('fetchBtn').addEventListener('click', async () => {
+  const url = document.getElementById('sourceUrl').value.trim();
+  if(!url){ showError('Paste a direct-download link first.'); return; }
+  showError('');
+  setStatus(false, 'Syncing…');
+  try{
+    const res = await fetch(url, {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const buf = await res.arrayBuffer();
+    loadFromArrayBuffer(buf, 'cloud link');
+  }catch(e){
+    showError('Fetch failed (' + e.message + '). This is usually a CORS or sharing-permission issue — try the drag-and-drop upload instead, or see the setup notes.');
+    setStatus(false, 'Sync failed');
+  }
+});
+
+document.getElementById('intervalSelect').addEventListener('change', (e) => {
+  if(refreshTimer) clearInterval(refreshTimer);
+  const ms = parseInt(e.target.value, 10);
+  if(ms > 0){
+    refreshTimer = setInterval(() => document.getElementById('fetchBtn').click(), ms);
+  }
+});
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if(f) handleFile(f);
+});
+fileInput.addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if(f) handleFile(f);
+});
+function handleFile(f){
+  showError('');
+  setStatus(false, 'Reading file…');
+  const reader = new FileReader();
+  reader.onload = (ev) => loadFromArrayBuffer(ev.target.result, f.name);
+  reader.onerror = () => { showError('Could not read the file.'); setStatus(false,'Sync failed'); };
+  reader.readAsArrayBuffer(f);
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+document.getElementById('searchShip').addEventListener('input', renderShipTable);
+loadFromDatabase();
+</script>
+</body>
+</html>
