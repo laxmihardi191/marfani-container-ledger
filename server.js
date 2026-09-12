@@ -118,15 +118,22 @@ app.get('/api/me', async (req, res) => {
 
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
   const displayName = String(req.body?.displayName || '').trim();
+  const requestedUsername = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
   if(displayName.length < 2 || password.length < 8){
     return res.status(400).json({error: 'Name and a password of 8+ characters are required'});
   }
   try{
-    const baseUsername = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '') || 'user';
+    if(requestedUsername && !/^[a-zA-Z0-9._-]{3,40}$/.test(requestedUsername)){
+      return res.status(400).json({error: 'Login user name must be 3-40 letters, numbers, dots, underscores, or hyphens'});
+    }
+    const baseUsername = (requestedUsername || displayName).toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '') || 'user';
     let username = baseUsername;
+    if(requestedUsername && (await pool.query('SELECT 1 FROM users WHERE username = $1', [username])).rowCount){
+      return res.status(409).json({error: 'That login user name already exists'});
+    }
     let suffix = 2;
-    while((await pool.query('SELECT 1 FROM users WHERE username = $1', [username])).rowCount){
+    while(!requestedUsername && (await pool.query('SELECT 1 FROM users WHERE username = $1', [username])).rowCount){
       username = baseUsername + suffix;
       suffix++;
     }

@@ -27,10 +27,12 @@
 <body>
 <main>
   <h1>Create user</h1>
-  <p>A login ID is generated automatically from the user name.</p>
+  <p>Choose a login user name, or leave it blank to generate one from the name.</p>
   <form id="userForm">
     <label for="displayName">User name</label>
     <input id="displayName" required>
+    <label for="username">Login user name</label>
+    <input id="username" placeholder="Example: John.Doe">
     <label for="password">Temporary password</label>
     <input id="password" type="password" required minlength="8">
     <button type="submit">Create user</button>
@@ -61,6 +63,7 @@
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         displayName:document.getElementById('displayName').value,
+        username:document.getElementById('username').value,
         password:document.getElementById('password').value
       })
     });
