@@ -11,6 +11,11 @@ const PORT = process.env.PORT || 3000;
 const APP_USERNAME = process.env.APP_USERNAME;
 const APP_PASSWORD = process.env.APP_PASSWORD;
 const SESSION_SECRET = process.env.SESSION_SECRET;
+const sharePointHeaders = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Accept': 'application/octet-stream,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
 const pool = process.env.DATABASE_URL ? new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
@@ -68,23 +73,21 @@ app.get('/api/cloud-file', async (req, res) => {
     const downloadUrl = sourceUrl + (sourceUrl.includes('?') ? '&' : '?') + 'download=1';
     let response = await fetch(downloadUrl, {
       redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36',
-        'Accept': 'application/octet-stream,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*',
-      },
+      headers: sharePointHeaders,
     });
     if(!response.ok){
       response = await fetch(sourceUrl, {
         redirect: 'follow',
-        headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'},
+        headers: sharePointHeaders,
       });
     }
     if(!response.ok) return res.status(response.status).json({error: `Cloud file returned HTTP ${response.status}`});
-    const contentType = response.headers.get('content-type') || '';
-    if(contentType.includes('text/html')){
-      return res.status(422).json({error: 'This SharePoint link opens a preview page. Set sharing to Anyone with the link can view and copy the link again.'});
-    }
     const buffer = Buffer.from(await response.arrayBuffer());
+    const contentType = response.headers.get('content-type') || '';
+    const isWorkbook = buffer.subarray(0, 2).toString() === 'PK' || contentType.includes('excel');
+    if(!isWorkbook){
+      return res.status(422).json({error: 'SharePoint returned a preview page instead of the Excel file. Copy the link again after selecting Anyone with the link can view.'});
+    }
     res.type('application/octet-stream').send(buffer);
   }catch(error){
     console.error('Cloud file fetch failed:', error);
