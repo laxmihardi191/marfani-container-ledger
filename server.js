@@ -68,10 +68,16 @@ app.get('/api/cloud-file', async (req, res) => {
     const downloadUrl = sourceUrl + (sourceUrl.includes('?') ? '&' : '?') + 'download=1';
     let response = await fetch(downloadUrl, {
       redirect: 'follow',
-      headers: {'User-Agent': 'Marfani-Container-Ledger/1.0'},
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36',
+        'Accept': 'application/octet-stream,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*',
+      },
     });
     if(!response.ok){
-      response = await fetch(sourceUrl, {redirect: 'follow'});
+      response = await fetch(sourceUrl, {
+        redirect: 'follow',
+        headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'},
+      });
     }
     if(!response.ok) return res.status(response.status).json({error: `Cloud file returned HTTP ${response.status}`});
     const contentType = response.headers.get('content-type') || '';
