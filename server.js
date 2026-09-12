@@ -158,11 +158,9 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-ensureDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Container Cost Ledger running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Container Cost Ledger running on port ${PORT}`);
+  ensureDatabase().catch(error => {
+    console.error('Database setup failed; app remains available:', error);
   });
-}).catch(error => {
-  console.error('Database setup failed:', error);
-  process.exit(1);
 });
