@@ -86,24 +86,6 @@
     flex-wrap:wrap;
     align-items:center;
   }
-  .report-nav{
-    display:grid;
-    border-bottom:1px solid var(--line);
-    background:#DDEAF4;
-  }
-  .report-nav a{
-    display:block;
-    padding:10px 14px;
-    color:#0067B1;
-    font-family:'IBM Plex Sans', sans-serif;
-    font-size:18px;
-    line-height:1.15;
-    text-decoration:underline;
-  }
-  .report-nav a:hover{background:rgba(255,255,255,.35);}
-  .report-nav a:nth-child(2){background:#EAF2FA;}
-  .report-nav a:nth-child(3){background:#A9DDD2; color:#006B82;}
-  .report-nav a:nth-child(4){background:#F3F0EA; color:var(--ink);}
   .sync-group{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
   .sync-group label{font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600;}
   input[type=text]{
@@ -333,13 +315,6 @@
   </div>
 </div>
 
-<nav class="report-nav" aria-label="Reports">
-  <a href="#fund-planning">Fund Planning Report</a>
-  <a href="#one-view">One View Report</a>
-  <a href="#container-costing" data-tab-target="ship">Container Costing</a>
-  <a href="#weekly-funds" data-tab-target="daywise">Weekly upcoming Funds &amp; Expenditures</a>
-</nav>
-
 <div class="syncbar" id="syncbar">
   <div class="sync-group">
     <label>Cloud file link</label>
@@ -372,7 +347,7 @@
   <div class="kpi"><div class="label">Closed / delivered</div><div class="value" id="kpiClosed">—</div></div>
 </div>
 
-<div class="content" id="one-view">
+<div class="content">
 
   <div id="emptyState" class="empty-state">
     Load your Excel file to bring the ledger to life.
@@ -381,7 +356,7 @@
 
   <div id="mainBody" style="display:none;">
 
-    <div class="charts-row" id="fund-planning">
+    <div class="charts-row">
       <div class="panel">
         <h2>Landing cost by vendor</h2>
         <div class="chart-holder"><canvas id="vendorChart"></canvas></div>
@@ -392,7 +367,7 @@
       </div>
     </div>
 
-    <div class="tabs" id="container-costing">
+    <div class="tabs">
       <button class="tab-btn active" data-tab="ship">Shipment Costing</button>
       <button class="tab-btn" data-tab="daywise">Daywise Expenses</button>
     </div>
@@ -411,7 +386,6 @@
     </div>
 
     <div class="tab-panel" id="tab-daywise">
-      <span id="weekly-funds" aria-hidden="true"></span>
       <div class="charts-row" style="margin-top:20px;">
         <div class="panel" style="grid-column:1/-1;">
           <h2>Total expenses this week, day wise</h2>
@@ -767,13 +741,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-  });
-});
-
-document.querySelectorAll('.report-nav a[data-tab-target]').forEach(link => {
-  link.addEventListener('click', () => {
-    const target = document.querySelector('.tab-btn[data-tab="' + link.dataset.tabTarget + '"]');
-    if(target) target.click();
   });
 });
 
