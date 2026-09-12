@@ -27,12 +27,10 @@
 <body>
 <main>
   <h1>Create user</h1>
-  <p>Only administrators can issue user IDs and passwords.</p>
+  <p>A login ID is generated automatically from the user name.</p>
   <form id="userForm">
     <label for="displayName">User name</label>
     <input id="displayName" required>
-    <label for="username">Employee ID</label>
-    <input id="username" required minlength="3">
     <label for="password">Temporary password</label>
     <input id="password" type="password" required minlength="8">
     <button type="submit">Create user</button>
@@ -63,14 +61,13 @@
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         displayName:document.getElementById('displayName').value,
-        username:document.getElementById('username').value,
         password:document.getElementById('password').value
       })
     });
     const result = await response.json().catch(() => ({}));
     const message = document.getElementById('message');
     if(response.ok){
-      message.textContent = 'User created. Give the user ID and password securely.';
+      message.textContent = 'User created. Login ID: ' + result.username + '. Give the ID and password securely.';
       event.currentTarget.reset();
       loadUsers();
     }else{

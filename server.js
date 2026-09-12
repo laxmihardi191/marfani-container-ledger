@@ -100,12 +100,18 @@ app.get('/api/me', async (req, res) => {
 
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
   const displayName = String(req.body?.displayName || '').trim();
-  const username = String(req.body?.username || '').trim().toLowerCase();
   const password = String(req.body?.password || '');
-  if(displayName.length < 2 || username.length < 3 || password.length < 8){
-    return res.status(400).json({error: 'Name, user ID of 3+ characters, and password of 8+ characters are required'});
+  if(displayName.length < 2 || password.length < 8){
+    return res.status(400).json({error: 'Name and a password of 8+ characters are required'});
   }
   try{
+    const baseUsername = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '') || 'user';
+    let username = baseUsername;
+    let suffix = 2;
+    while((await pool.query('SELECT 1 FROM users WHERE username = $1', [username])).rowCount){
+      username = baseUsername + suffix;
+      suffix++;
+    }
     const passwordHash = await bcrypt.hash(password, 12);
     await pool.query('INSERT INTO users (display_name, username, password_hash, role) VALUES ($1, $2, $3, $4)', [displayName, username, passwordHash, 'user']);
     res.json({ok: true, username});
