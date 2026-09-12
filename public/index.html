@@ -766,14 +766,15 @@ function renderShipAccordion(){
   const rows = shipRows.filter(row => !search || [row.vendor,row.product,row.bl6,row.blNo,row.category,row.entity,row.shipmentStatus].some(value => String(value || '').toLowerCase().includes(search)));
   const body = document.getElementById('shipBody');
   body.innerHTML = rows.map(row => {
-    const open = expandedKeys.has(row._id);
+    const rowKey = row._id || 'row' + shipRows.indexOf(row);
+    const open = expandedKeys.has(rowKey);
     const containers = [[row.cont1,row.qty1],[row.cont2,row.qty2],[row.cont3,row.qty3],[row.cont4,row.qty4]].filter(item => item[0]);
     const detail = fieldGroup('Order & Party', [['Entity',row.entity],['BL No.',row.blNo],['BL Date',fmtDate(row.blDate)],['SO No.',row.soNo],['Order Date',fmtDate(row.orderDate)],['Category',row.category],['Composition',row.composition],['Qty as per SO (MT)',row.qtySO != null ? fmtNum(row.qtySO,2) : null],['Rate as per SO',row.rateSO != null ? fmtNum(row.rateSO,2) : null]])
       + fieldGroup('Containers & Shipping', containers.map((item,index)=>[`Container ${index+1}`,item[0] + (item[1] != null ? ' · ' + fmtNum(item[1],2) + ' MT' : '')]).concat([['Container Type',row.containerType],['Seal No.',row.sealNo],['Vessel / Voyage',row.vessel],['Port of Loading',row.portLoading],['Port of Discharge',row.portDischarge],['Place of Delivery',row.placeDelivery],['Shipping Line',row.shippingLine],['HSN Code',row.hsnCode]]))
       + fieldGroup('Invoice & Payment (USD)', [['Invoice No.',row.invoiceNo],['Invoice Date',fmtDate(row.invoiceDate)],['Invoice Qty',row.invoiceQty != null ? fmtNum(row.invoiceQty,2) : null],['Rate as per Invoice',row.rateInvoice != null ? fmtNum(row.rateInvoice,2) : null],['Amount Paid',row.amountPaidUsd != null ? fmtNum(row.amountPaidUsd) : null],['Pending to Vendor',fmtNum(row._pendingUsd)]] )
       + fieldGroup('Landed Costs (INR)', [['DO Payment',fmtNum(row.doPayment)],['Detention',fmtNum(row.detention)],['Damage Claim',fmtNum(row.damageClaim)],['Duty Amount',fmtNum(row.dutyAmount)],['Interest / Penalty',fmtNum(row.interestPenalty)],['Total BE Amount',fmtNum(row.totalBEAmount)],['CHA Invoice Amount',fmtNum(row.chaInvoiceAmount)],['BE No.',row.beNo]])
       + fieldGroup('Status & Docs', [['Documents Status',row.documentsStatus],['CHA Name',row.chaName],['Doc Tracking No.',row.docTrackingNo],['Container Received Date',fmtDate(row.containerReceivedDate)],['DN Remarks',row.dnRemarks]]);
-    return `<div class="acc-row ${open ? 'open' : ''}" data-id="${row._id}"><div class="acc-summary"><span class="acc-caret">${open ? '▾' : '▸'}</span><span class="acc-cell">${row.bl6 ?? ''}</span><span class="acc-cell"><span class="pill ${statusPillClass(row.orderStatus)}">${row.orderStatus ?? '—'}</span></span><span class="acc-cell text">${row.vendor ?? ''}</span><span class="acc-cell text">${row.product ?? ''}</span><span class="acc-cell">${fmtNum(row.numContainers)}</span><span class="acc-cell">₹${fmtNum(row._costTotal)}</span><span class="acc-cell"><span class="pill ${statusPillClass(row.shipmentStatus)}">${row.shipmentStatus ?? '—'}</span></span></div><div class="acc-detail" style="display:${open ? 'block' : 'none'}">${detail}</div></div>`;
+    return `<div class="acc-row ${open ? 'open' : ''}" data-id="${rowKey}"><div class="acc-summary"><span class="acc-caret">${open ? '▾' : '▸'}</span><span class="acc-cell">${row.bl6 ?? ''}</span><span class="acc-cell"><span class="pill ${statusPillClass(row.orderStatus)}">${row.orderStatus ?? '—'}</span></span><span class="acc-cell text">${row.vendor ?? ''}</span><span class="acc-cell text">${row.product ?? ''}</span><span class="acc-cell">${fmtNum(row.numContainers)}</span><span class="acc-cell">₹${fmtNum(row._costTotal)}</span><span class="acc-cell"><span class="pill ${statusPillClass(row.shipmentStatus)}">${row.shipmentStatus ?? '—'}</span></span></div><div class="acc-detail" style="display:${open ? 'block' : 'none'}">${detail}</div></div>`;
   }).join('');
   body.querySelectorAll('.acc-summary').forEach(summary => summary.addEventListener('click', () => { const id = summary.closest('.acc-row').dataset.id; if(expandedKeys.has(id)) expandedKeys.delete(id); else expandedKeys.add(id); renderShipAccordion(); }));
   document.getElementById('shipCount').textContent = rows.length + ' of ' + shipRows.length + ' shipments';
@@ -869,6 +870,11 @@ async function loadFromDatabase(){
     const data = await response.json();
     if(!data.shipRows.length && !data.daywiseRows.length) return;
     shipRows = data.shipRows;
+    shipRows.forEach((row, index) => {
+      if(!row._id) row._id = 'row' + index;
+      if(row._costTotal === undefined) row._costTotal = (row.dutyAmount||row.duty||0) + (row.doPayment||0) + (row.detention||0) + (row.damageClaim||row.damage||0) + (row.interestPenalty||row.interest||0) + (row.chaInvoiceAmount||row.chaInvoice||0);
+      if(row._pendingUsd === undefined) row._pendingUsd = Math.max((row.afterAdvInvoice ?? row.afterAdvSO ?? row.afterAdv ?? 0) - (row.amountPaidUsd||row.paidUsd||0), 0);
+    });
     daywiseRows = data.daywiseRows;
     renderAll();
     setStatus(true, 'Loaded from shared database');
