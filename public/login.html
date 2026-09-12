@@ -22,14 +22,15 @@
   <h1>Marfani Steels</h1>
   <p>Container Cost Ledger</p>
   <form id="loginForm">
-    <label for="username">User ID</label>
+    <label for="username">Employee ID</label>
     <input id="username" name="username" autocomplete="username" required>
     <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="current-password" required>
     <button type="submit">Sign in</button>
     <div id="error" role="alert"></div>
   </form>
-  <p>Accounts are created by an administrator.</p>
+    <p>Use your employee ID and password.</p>
+    <p><a href="/register">Create your account</a></p>
 </main>
 <script>
   document.getElementById('loginForm').addEventListener('submit', async event => {

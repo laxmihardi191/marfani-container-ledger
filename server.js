@@ -52,7 +52,7 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/register', (req, res) => {
-  res.redirect('/login');
+  res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
 app.post('/api/login', async (req, res) => {
@@ -67,6 +67,25 @@ app.post('/api/login', async (req, res) => {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   res.setHeader('Set-Cookie', `cst_session=${sessionToken(result.rows[0].username)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${secure}`);
   res.json({ok: true});
+});
+
+app.post('/api/register', async (req, res) => {
+  const displayName = String(req.body?.displayName || '').trim();
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if(!pool) return res.status(503).json({error: 'Database is not configured'});
+  if(displayName.length < 2 || username.length < 3 || password.length < 8){
+    return res.status(400).json({error: 'Enter your name, a unique employee ID of 3+ characters, and a password of 8+ characters'});
+  }
+  try{
+    const passwordHash = await bcrypt.hash(password, 12);
+    await pool.query('INSERT INTO users (display_name, username, password_hash, role) VALUES ($1, $2, $3, $4)', [displayName, username, passwordHash, 'user']);
+    res.json({ok: true});
+  }catch(error){
+    if(error.code === '23505') return res.status(409).json({error: 'That employee ID is already registered. Use a different ID.'});
+    console.error('Registration failed:', error);
+    res.status(500).json({error: 'Could not create account'});
+  }
 });
 
 app.post('/api/logout', (req, res) => {
